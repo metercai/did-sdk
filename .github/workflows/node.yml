@@ -36,7 +36,7 @@ jobs:
         with:
           node-version: 22
       - name: Install zig (musl cross)
-        if: contains(matrix.target, 'musl')
+        if: contains(matrix.target.target, 'musl')
         uses: goto-bus-stop/setup-zig@v2
         with:
           version: 0.13.0
@@ -44,7 +44,7 @@ jobs:
       - name: Build addon
         shell: bash
         run: |
-          if [[ "${{ matrix.target }}" == *musl* ]]; then
+          if [[ "${{ matrix.target.target }}" == *musl* ]]; then
             cd ${{ matrix.variant.binding }} && npx napi build --platform --release --target ${{ matrix.target.target }} --zig
           else
             cd ${{ matrix.variant.binding }} && npx napi build --platform --release --target ${{ matrix.target.target }}
