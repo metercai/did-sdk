@@ -61,6 +61,19 @@ def test_gateway_access_v1_bytes():
         assert out.decode() == case["expected_bytes_utf8"]
 
 
+def test_vp_sd_v1_bytes():
+    for case in VECTORS["vp_sd_v1"]:
+        data = case["input"]
+        out = DidSdk.vp_sd_v1_bytes(
+            data["holder"],
+            data["challenge"],
+            data["domain"],
+            data["disclosures_hash"],
+            data["vc_hashes"],
+        )
+        assert out.decode() == case["expected_bytes_utf8"]
+
+
 def test_governance_signing_inputs():
     out = DidSdk.participant_registration_v1_bytes(
         7,

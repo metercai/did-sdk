@@ -77,6 +77,37 @@ pub fn vp_v1(holder: &str, challenge: &str, domain: &str, vc_hashes: &[String]) 
     out.into_bytes()
 }
 
+/// 选择性披露 VP 的签名对象（SD-JWT 扩展）。
+///
+/// 格式：
+/// ```text
+/// VP-SD-v1
+/// {holder}
+/// {challenge}
+/// {domain}
+/// {disclosures_hash}
+/// {vc_hash_1}
+/// {vc_hash_2}
+/// ...
+/// ```
+///
+/// `vc_hash` 是完整 VC JSON 的 SHA-256（hex）；`disclosures_hash` 是
+/// Disclosures 数组 canonical JSON 的 SHA-256（hex）。
+pub fn vp_sd_v1(
+    holder: &str,
+    challenge: &str,
+    domain: &str,
+    disclosures_hash: &str,
+    vc_hashes: &[String],
+) -> Vec<u8> {
+    let mut out = format!("VP-SD-v1\n{holder}\n{challenge}\n{domain}\n{disclosures_hash}");
+    for hash in vc_hashes {
+        out.push('\n');
+        out.push_str(hash);
+    }
+    out.into_bytes()
+}
+
 /// 参与方注册绑定声明（服务端 ChainOwner 治理）。
 ///
 /// 格式（POC 约定；字段顺序与 `ParticipantRecord` 一致）：
@@ -195,6 +226,15 @@ mod tests {
         assert_eq!(
             String::from_utf8(delegation_authorization_v1("h", "did:key:z", "op", 9)).unwrap(),
             "DelegationAuthorization-v1\nh\ndid:key:z\nop\n9"
+        );
+    }
+
+    #[test]
+    fn vp_sd_layout() {
+        let bytes = vp_sd_v1("d", "c", "x", "dh", &["h1".into(), "h2".into()]);
+        assert_eq!(
+            String::from_utf8(bytes).unwrap(),
+            "VP-SD-v1\nd\nc\nx\ndh\nh1\nh2"
         );
     }
 

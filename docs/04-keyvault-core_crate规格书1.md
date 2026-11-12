@@ -3,7 +3,7 @@
 
 > **同步状态（2026-11-12）**：本文档与当前代码同步。已实现三 namespace
 > （`chain-account/`、`participant-did/`、`client-did/`）、Ed25519/Sr25519、
-> SS58、FileKeystore v2（`.enc` + index v2）、`sign_checked` 与 7 个签名输入。
+> SS58、FileKeystore v2（`.enc` + index v2）、`sign_checked`、`sd` 盐化哈希工具与 8 个签名输入。
 > 详见 `docs/implementation-report.md` 与 `docs/acceptance-checklist.md`。
 
 ## 0. 定位与设计原则
@@ -359,6 +359,26 @@ pub mod signing_input {
         delegate_operator: &str,
         timestamp: u64,
     ) -> Vec<u8>;
+
+    /// 选择性披露 VP 签名对象（SD-JWT 附件）
+    pub fn vp_sd_v1(
+        holder: &str,
+        challenge: &str,
+        domain: &str,
+        disclosures_hash: &str,
+        vc_hashes: &[String],
+    ) -> Vec<u8>;
+}
+
+pub mod sd {
+    pub const SALT_LENGTH: usize = 16;
+    pub fn generate_salt() -> Result<[u8; 16], KeyVaultError>;
+    pub fn base64url_encode(data: &[u8]) -> String;
+    pub fn base64url_decode(value: &str) -> Result<Vec<u8>, KeyVaultError>;
+    pub fn disclosure_hash(salt: &[u8], name: &str, value: &serde_json::Value)
+        -> Result<[u8; 32], KeyVaultError>;
+    pub fn disclosure_hash_string(salt: &[u8], name: &str, value: &serde_json::Value)
+        -> Result<String, KeyVaultError>;
 }
 ```
 
@@ -375,9 +395,9 @@ pub mod signing_input {
 
 ### 5.2 `did-sdk<Server>`
 
-- 不加载 `KeyVault`；
-- 只做 VC 钱包持有侧管理和 DID 解析；
-- 签发 VC 时由 `chain-sdk` / `chain-owner-sdk` 注入 `Proof`。
+- 生产环境不加载 `KeyVault`；开发/测试/试运行可配置 `FileKeystore` 本地签名器；
+- 持有侧 VC 钱包与 DID 解析；
+- 生产签发 VC 时由 `chain-sdk` / `chain-owner-sdk` 注入 `Proof`。
 
 ### 5.3 `chain-sdk` / `chain-owner-sdk`
 
@@ -453,7 +473,7 @@ pub mod signing_input {
 3. `KeyNamespace` / `KeyAlgorithm` / `KeyId` 定义；
 4. `FileKeystore` 实现（含 namespace 子目录、加密文件格式、解锁校验）；
 5. 密码学原语模块（含 SS58 转换）；
-6. 签名对象构造模块（7 个构造函数）；
+6. 签名对象构造模块（8 个构造函数）+ `sd` 盐化哈希工具；
 7. 配置文件示例（三种密码管理方式）；
 8. 单元测试（生成、加载、签名、错误密码、密钥不存在、namespace 隔离、跨 namespace 拒绝）；
 9. 验收记录（K1–K13）。
@@ -463,6 +483,6 @@ pub mod signing_input {
 | 文档 | 关系 |
 |---|---|
 | 文档一：总体架构与任务书 | 本文档是其配套规格书 |
-| 文档二：DidSdk 规格书 | `did-sdk<Client>` 依赖其 `KeyVault` 管理 `client-did/` 私钥；`did-sdk<Server>` 不加载 KeyVault |
+| 文档二：DidSdk 规格书 | `did-sdk<Client>` 依赖其 `KeyVault` 管理 `client-did/` 私钥；`did-sdk<Server>` 生产不加载 KeyVault，开发/测试可配置 FileKeystore |
 | 文档三：ChainSdk 规格书 | `chain-sdk` 依赖其 `KeyVault` 管理 `chain-account/` 与 `participant-did/` 两类密钥 |
 | 文档四：ChainOwnerSdk 规格书 | `chain-owner-sdk` 依赖其 `KeyVault` 管理链主两类密钥 |

@@ -15,8 +15,8 @@ use serde::de::DeserializeOwned;
 
 use did_sdk::config::{ConfigOverrides, resolve_config};
 use did_sdk::{
-    ClientConfig, DidSdkError as CoreError, DidSdkMode, PeerNumalgo, Proof, ServerConfig,
-    VerifiableCredential, build_client_sdk, build_server_sdk,
+    ClientConfig, DidSdkError as CoreError, DidSdkMode, Disclosure, PeerNumalgo, Proof,
+    SelectiveVpRequest, ServerConfig, VerifiableCredential, build_client_sdk, build_server_sdk,
 };
 
 type Sdk = did_sdk::DidSdk<did_sdk::Client>;
@@ -34,6 +34,10 @@ fn to_pyerr(error: CoreError) -> PyErr {
         | CoreError::UnsupportedDidMethod(message)
         | CoreError::DidResolutionFailed(message) => InvalidArgumentError::new_err(message),
         CoreError::VcVerificationFailed(message) => DidSdkError::new_err(message),
+        CoreError::DisclosureHashMismatch(message)
+        | CoreError::DisclosureDuplicate(message)
+        | CoreError::DisclosureMissing(message)
+        | CoreError::SdAlgUnsupported(message) => DidSdkError::new_err(message),
         other => DidSdkError::new_err(other.to_string()),
     }
 }
@@ -374,6 +378,27 @@ impl DidSdk {
     }
 
     #[staticmethod]
+    fn vp_sd_v1_bytes(
+        py: Python<'_>,
+        holder: &str,
+        challenge: &str,
+        domain: &str,
+        disclosures_hash: &str,
+        vc_hashes: Vec<String>,
+    ) -> Py<PyBytes> {
+        bytes(
+            py,
+            keyvault_core::signing_input::vp_sd_v1(
+                holder,
+                challenge,
+                domain,
+                disclosures_hash,
+                &vc_hashes,
+            ),
+        )
+    }
+
+    #[staticmethod]
     fn gateway_access_v1_bytes(
         py: Python<'_>,
         did: &str,
@@ -701,6 +726,265 @@ impl ServerDidSdk {
 
     fn resolved_config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         to_py_object(py, &self.config)
+    }
+}
+
+#[pymethods]
+impl DidSdk {
+    /// 签发带选择性披露属性的 VC，返回 {"vc": ..., "disclosures": [...]}。
+    fn issue_selective_vc<'py>(
+        &self,
+        py: Python<'py>,
+        claims: &Bound<'py, PyAny>,
+        disclosable: Vec<String>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let claims: serde_json::Value = from_py_object(claims)?;
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let (vc, disclosures) = inner
+                .issue_selective_vc(claims, &disclosable)
+                .map_err(to_pyerr)?;
+            Python::with_gil(|py| {
+                to_py_object(
+                    py,
+                    &serde_json::json!({"vc": vc, "disclosures": disclosures}),
+                )
+            })
+        })
+    }
+
+    /// 存储 VC 与 Disclosures（同一加密信封）。
+    fn store_vc_with_disclosures<'py>(
+        &self,
+        py: Python<'py>,
+        vc: &Bound<'py, PyAny>,
+        disclosures: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let vc: VerifiableCredential = from_py_object(vc)?;
+        let disclosures: Vec<Disclosure> = from_py_object(disclosures)?;
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            inner
+                .store_vc_with_disclosures(vc, disclosures)
+                .await
+                .map_err(to_pyerr)
+        })
+    }
+
+    /// 获取 VC 与 Disclosures。
+    fn get_vc_with_disclosures<'py>(
+        &self,
+        py: Python<'py>,
+        anchor_id: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let bundle = inner
+                .get_vc_with_disclosures(&anchor_id)
+                .await
+                .map_err(to_pyerr)?;
+            Python::with_gil(|py| match bundle {
+                Some((vc, disclosures)) => to_py_object(
+                    py,
+                    &serde_json::json!({"vc": vc, "disclosures": disclosures}),
+                ),
+                None => Ok(py.None()),
+            })
+        })
+    }
+
+    /// 列出可披露属性名。
+    fn list_disclosable_attributes<'py>(
+        &self,
+        py: Python<'py>,
+        anchor_id: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let names = inner
+                .list_disclosable_attributes(&anchor_id)
+                .await
+                .map_err(to_pyerr)?;
+            Python::with_gil(|py| to_py_object(py, &names))
+        })
+    }
+
+    /// 构造选择性披露 VP。
+    fn build_vp_selective<'py>(
+        &self,
+        py: Python<'py>,
+        requests: &Bound<'py, PyAny>,
+        challenge: String,
+        domain: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let requests: Vec<SelectiveVpRequest> = from_py_object(requests)?;
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let vp = inner
+                .build_vp_selective(requests, &challenge, &domain)
+                .await
+                .map_err(to_pyerr)?;
+            Python::with_gil(|py| to_py_object(py, &vp))
+        })
+    }
+}
+
+#[pymethods]
+impl ServerDidSdk {
+    fn issue_selective_vc<'py>(
+        &self,
+        py: Python<'py>,
+        claims: &Bound<'py, PyAny>,
+        disclosable: Vec<String>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.inner_issue_selective_vc(py, claims, disclosable)
+    }
+
+    fn store_vc_with_disclosures<'py>(
+        &self,
+        py: Python<'py>,
+        vc: &Bound<'py, PyAny>,
+        disclosures: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.inner_store_vc_with_disclosures(py, vc, disclosures)
+    }
+
+    fn get_vc_with_disclosures<'py>(
+        &self,
+        py: Python<'py>,
+        anchor_id: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.inner_get_vc_with_disclosures(py, anchor_id)
+    }
+
+    fn list_disclosable_attributes<'py>(
+        &self,
+        py: Python<'py>,
+        anchor_id: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.inner_list_disclosable_attributes(py, anchor_id)
+    }
+
+    fn build_vp_selective<'py>(
+        &self,
+        py: Python<'py>,
+        requests: &Bound<'py, PyAny>,
+        challenge: String,
+        domain: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.inner_build_vp_selective(py, requests, challenge, domain)
+    }
+
+    /// 验证选择性披露 VP。
+    fn verify_vp<'py>(
+        &self,
+        py: Python<'py>,
+        vp: &Bound<'py, PyAny>,
+        expected_challenge: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let vp: did_sdk::VerifiablePresentation = from_py_object(vp)?;
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let result = inner
+                .verify_vp(&vp, &expected_challenge)
+                .await
+                .map_err(to_pyerr)?;
+            Python::with_gil(|py| to_py_object(py, &result))
+        })
+    }
+}
+
+impl ServerDidSdk {
+    fn inner_issue_selective_vc<'py>(
+        &self,
+        py: Python<'py>,
+        claims: &Bound<'py, PyAny>,
+        disclosable: Vec<String>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let claims: serde_json::Value = from_py_object(claims)?;
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let (vc, disclosures) = inner
+                .issue_selective_vc(claims, &disclosable)
+                .map_err(to_pyerr)?;
+            Python::with_gil(|py| {
+                to_py_object(
+                    py,
+                    &serde_json::json!({"vc": vc, "disclosures": disclosures}),
+                )
+            })
+        })
+    }
+
+    fn inner_store_vc_with_disclosures<'py>(
+        &self,
+        py: Python<'py>,
+        vc: &Bound<'py, PyAny>,
+        disclosures: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let vc: VerifiableCredential = from_py_object(vc)?;
+        let disclosures: Vec<Disclosure> = from_py_object(disclosures)?;
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            inner
+                .store_vc_with_disclosures(vc, disclosures)
+                .await
+                .map_err(to_pyerr)
+        })
+    }
+
+    fn inner_get_vc_with_disclosures<'py>(
+        &self,
+        py: Python<'py>,
+        anchor_id: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let bundle = inner
+                .get_vc_with_disclosures(&anchor_id)
+                .await
+                .map_err(to_pyerr)?;
+            Python::with_gil(|py| match bundle {
+                Some((vc, disclosures)) => to_py_object(
+                    py,
+                    &serde_json::json!({"vc": vc, "disclosures": disclosures}),
+                ),
+                None => Ok(py.None()),
+            })
+        })
+    }
+
+    fn inner_list_disclosable_attributes<'py>(
+        &self,
+        py: Python<'py>,
+        anchor_id: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let names = inner
+                .list_disclosable_attributes(&anchor_id)
+                .await
+                .map_err(to_pyerr)?;
+            Python::with_gil(|py| to_py_object(py, &names))
+        })
+    }
+
+    fn inner_build_vp_selective<'py>(
+        &self,
+        py: Python<'py>,
+        requests: &Bound<'py, PyAny>,
+        challenge: String,
+        domain: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let requests: Vec<SelectiveVpRequest> = from_py_object(requests)?;
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let vp = inner
+                .build_vp_selective(requests, &challenge, &domain)
+                .await
+                .map_err(to_pyerr)?;
+            Python::with_gil(|py| to_py_object(py, &vp))
+        })
     }
 }
 

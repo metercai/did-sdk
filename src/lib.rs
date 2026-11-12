@@ -6,6 +6,7 @@
 
 pub mod config;
 pub mod error;
+pub mod sd;
 pub mod server_request;
 pub mod types;
 
@@ -122,6 +123,48 @@ impl<M: SdkMode> DidSdk<M> {
         self.core.vcs.put(&vc)
     }
 
+    /// 列出某 VC 可选择性披露的属性名（来自已存储的 Disclosures）。
+    pub async fn list_disclosable_attributes(
+        &self,
+        anchor_id: &str,
+    ) -> Result<Vec<String>, DidSdkError> {
+        let bundle = self
+            .core
+            .vcs
+            .get_bundle(anchor_id)?
+            .ok_or_else(|| DidSdkError::VcNotFound(anchor_id.to_string()))?;
+        let mut names: Vec<String> = bundle
+            .disclosures
+            .into_iter()
+            .map(|disclosure| disclosure.name)
+            .collect();
+        names.sort();
+        names.dedup();
+        Ok(names)
+    }
+
+    /// 存储 VC 及其 Disclosures（同一加密信封绑定）。
+    pub async fn store_vc_with_disclosures(
+        &self,
+        vc: VerifiableCredential,
+        disclosures: Vec<Disclosure>,
+    ) -> Result<(), DidSdkError> {
+        sd::verify_disclosures(&vc, &disclosures)?;
+        self.core.vcs.put_bundle(&vc, &disclosures)
+    }
+
+    /// 按 anchor id 获取 VC 及其 Disclosures。
+    pub async fn get_vc_with_disclosures(
+        &self,
+        anchor_id: &str,
+    ) -> Result<Option<(VerifiableCredential, Vec<Disclosure>)>, DidSdkError> {
+        Ok(self
+            .core
+            .vcs
+            .get_bundle(anchor_id)?
+            .map(|bundle| (bundle.vc, bundle.disclosures)))
+    }
+
     /// 按 anchor id 获取 VC。
     pub async fn get_vc(
         &self,
@@ -169,12 +212,122 @@ impl<M: SdkMode> DidSdk<M> {
         } else {
             None
         };
-        Ok(vc::build_vp_object(&holder, vcs, challenge, domain, proof))
+        Ok(vc::build_vp_object(
+            &holder, vcs, challenge, domain, None, proof,
+        ))
+    }
+
+    /// 构造选择性披露 VP。
+    ///
+    /// `requests` 中每个 VC 的 `disclose` 为空表示该 VC 全部属性隐藏；
+    /// Disclosures 必须已通过 `store_vc_with_disclosures` 与 VC 绑定存储。
+    pub async fn build_vp_selective(
+        &self,
+        requests: Vec<SelectiveVpRequest>,
+        challenge: &str,
+        domain: &str,
+    ) -> Result<VerifiablePresentation, DidSdkError> {
+        let holder = self.holder_did()?;
+        let mut types: Vec<String> = requests
+            .iter()
+            .flat_map(|request| request.credential.types.iter().cloned())
+            .collect();
+        types.sort();
+        types.dedup();
+        self.core.confirm_vp(&types, challenge).await?;
+        self.backend.confirm_vp().await?;
+
+        let mut vcs = Vec::with_capacity(requests.len());
+        let mut disclosures = Vec::new();
+        for request in &requests {
+            let anchor_id =
+                request.credential.anchor_id.as_deref().ok_or_else(|| {
+                    DidSdkError::InvalidArgument("VC is missing anchor_id".into())
+                })?;
+            let bundle = self
+                .core
+                .vcs
+                .get_bundle(anchor_id)?
+                .ok_or_else(|| DidSdkError::VcNotFound(anchor_id.to_string()))?;
+            let selected = sd::select_disclosures(&bundle.disclosures, &request.disclose)?;
+            sd::verify_disclosures(&request.credential, &selected)?;
+            vcs.push(request.credential.clone());
+            disclosures.extend(selected);
+        }
+
+        let disclosures_hash = sd::disclosures_hash(&disclosures)?;
+        let vc_hashes = vcs.iter().map(vc::vc_hash).collect::<Result<Vec<_>, _>>()?;
+        let signing_input = keyvault_core::signing_input::vp_sd_v1(
+            &holder,
+            challenge,
+            domain,
+            &disclosures_hash,
+            &vc_hashes,
+        );
+        let proof = if let Some(vault) = &self.vault {
+            let key_id = self.active_key().await?;
+            let namespace = if M::IS_CLIENT {
+                KeyNamespace::ClientDid
+            } else {
+                KeyNamespace::ParticipantDid
+            };
+            let signature = vault
+                .sign_checked(&key_id, &signing_input, namespace, KeyAlgorithm::Ed25519)
+                .await
+                .map_err(map_vault_err)?;
+            Some(vc::proof_for(&holder, vc::now_ts(), &signature.0))
+        } else {
+            None
+        };
+        Ok(vc::build_vp_object(
+            &holder,
+            vcs,
+            challenge,
+            domain,
+            Some(disclosures),
+            proof,
+        ))
     }
 
     /// 安装用户确认 handler（仅 Client 有意义）。
     pub fn set_request_handler(&self, handler: Arc<dyn ServerRequestHandler>) {
         self.core.set_handler(handler);
+    }
+
+    fn issue_vc_local(
+        &self,
+        claims: serde_json::Value,
+        disclosable: &[String],
+    ) -> Result<(VerifiableCredential, Vec<Disclosure>), DidSdkError> {
+        let vault = self
+            .vault
+            .as_ref()
+            .ok_or_else(|| DidSdkError::Unsupported("no local signer".into()))?;
+        let backend = self.backend.clone();
+        block_on_backend(move || async move { backend.confirm_signing().await })?;
+        let issuer = self.holder_did()?;
+        let key_id = block_on_future(self.active_key())?;
+        let namespace = if M::IS_CLIENT {
+            KeyNamespace::ClientDid
+        } else {
+            KeyNamespace::ParticipantDid
+        };
+        let (claims, disclosures) = if disclosable.is_empty() {
+            (claims, Vec::new())
+        } else {
+            sd::split_selective_claims(claims, disclosable)?
+        };
+        let mut vc = vc::build_vc(&issuer, claims, None);
+        let signing_input = vc::vc_signing_input(&vc)?;
+        let signature = block_on_future(vault.sign_checked(
+            &key_id,
+            &signing_input,
+            namespace,
+            KeyAlgorithm::Ed25519,
+        ))
+        .map_err(map_vault_err)?;
+        vc.proof = Some(vc::proof_for(&issuer, vc::now_ts(), &signature.0));
+        Ok((vc, disclosures))
     }
 
     fn holder_did(&self) -> Result<String, DidSdkError> {
@@ -337,25 +490,16 @@ impl DidSdk<Client> {
         &self,
         claims: serde_json::Value,
     ) -> Result<VerifiableCredential, DidSdkError> {
-        let backend = self.backend.clone();
-        block_on_backend(move || async move { backend.confirm_signing().await })?;
-        let holder = self.holder_did()?;
-        let key_id = block_on_future(self.active_key())?;
-        let vault = self
-            .vault
-            .as_ref()
-            .ok_or_else(|| DidSdkError::Unsupported("no KeyVault".into()))?;
-        let mut vc = vc::build_vc(&holder, claims, None);
-        let signing_input = vc::vc_signing_input(&vc)?;
-        let signature = block_on_future(vault.sign_checked(
-            &key_id,
-            &signing_input,
-            KeyNamespace::ClientDid,
-            KeyAlgorithm::Ed25519,
-        ))
-        .map_err(map_vault_err)?;
-        vc.proof = Some(vc::proof_for(&holder, vc::now_ts(), &signature.0));
-        Ok(vc)
+        self.issue_vc_local(claims, &[]).map(|(vc, _)| vc)
+    }
+
+    /// 签发带选择性披露属性的 VC，返回 VC 与对应 Disclosures。
+    pub fn issue_selective_vc(
+        &self,
+        claims: serde_json::Value,
+        disclosable: &[String],
+    ) -> Result<(VerifiableCredential, Vec<Disclosure>), DidSdkError> {
+        self.issue_vc_local(claims, disclosable)
     }
 
     /// 构造 DID-Signature header。
@@ -560,6 +704,112 @@ impl DidSdk<Server> {
         })
     }
 
+    /// 验证选择性披露 VP（holder 签名 + challenge + VC + Disclosure 哈希）。
+    ///
+    /// 锚定查询不在此处执行（R1：由 chain-sdk 负责）。
+    pub async fn verify_vp(
+        &self,
+        vp: &VerifiablePresentation,
+        expected_challenge: &str,
+    ) -> Result<VpVerificationResult, DidSdkError> {
+        let mut reason = None;
+        let challenge_ok = vp.challenge == expected_challenge;
+        if !challenge_ok {
+            reason = Some("challenge mismatch".into());
+        }
+
+        let holder_key = {
+            let docs = self
+                .docs
+                .read()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            did::public_key_from_did_with_docs(&vp.holder, &docs)
+        };
+        let holder_resolved = holder_key.is_ok();
+        let holder_ok = match (holder_key, &vp.proof) {
+            (Ok(key), Some(proof)) => match keyvault_core::crypto::base58::decode(&proof.jws) {
+                Ok(signature) => {
+                    let vc_hashes = vp
+                        .verifiable_credential
+                        .iter()
+                        .map(vc::vc_hash)
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let signing_input = match &vp.disclosures {
+                        Some(disclosures) => {
+                            let body_hash = sd::disclosures_hash(disclosures)?;
+                            keyvault_core::signing_input::vp_sd_v1(
+                                &vp.holder,
+                                &vp.challenge,
+                                &vp.domain,
+                                &body_hash,
+                                &vc_hashes,
+                            )
+                        }
+                        None => keyvault_core::signing_input::vp_v1(
+                            &vp.holder,
+                            &vp.challenge,
+                            &vp.domain,
+                            &vc_hashes,
+                        ),
+                    };
+                    keyvault_core::crypto::ed25519::verify(&key, &signing_input, &signature)
+                }
+                Err(error) => {
+                    reason = Some(format!("invalid VP proof encoding: {error}"));
+                    false
+                }
+            },
+            (Err(error), _) => {
+                reason = Some(error.to_string());
+                false
+            }
+            (_, None) => {
+                reason = Some("VP has no proof".into());
+                false
+            }
+        };
+
+        let mut credentials = Vec::with_capacity(vp.verifiable_credential.len());
+        for credential in &vp.verifiable_credential {
+            let result = self.verify_vc(credential).await?;
+            if !result.verified && reason.is_none() {
+                reason = result.reason.clone();
+            }
+            credentials.push(result);
+        }
+
+        let disclosure_count = match &vp.disclosures {
+            Some(disclosures) => {
+                let mut names = std::collections::HashSet::new();
+                let mut hash_sets = Vec::with_capacity(vp.verifiable_credential.len());
+                for credential in &vp.verifiable_credential {
+                    hash_sets.push(sd::sd_hashes(credential)?);
+                }
+                for disclosure in disclosures {
+                    if !names.insert(disclosure.name.as_str()) {
+                        return Err(DidSdkError::DisclosureDuplicate(disclosure.name.clone()));
+                    }
+                    let hash = disclosure.hash_string()?;
+                    if !hash_sets.iter().any(|set| set.contains(&hash)) {
+                        return Err(DidSdkError::DisclosureHashMismatch(disclosure.name.clone()));
+                    }
+                }
+                disclosures.len()
+            }
+            None => 0,
+        };
+
+        let credentials_ok = credentials.iter().all(|result| result.verified);
+        let verified = challenge_ok && holder_ok && credentials_ok;
+        Ok(VpVerificationResult {
+            verified,
+            holder_resolved,
+            credentials,
+            disclosure_count,
+            reason,
+        })
+    }
+
     /// 是否配置了本地签名器（开发/测试/试运行）。
     pub fn has_signer(&self) -> bool {
         self.vault.is_some()
@@ -595,33 +845,18 @@ impl DidSdk<Server> {
         &self,
         claims: serde_json::Value,
     ) -> Result<VerifiableCredential, DidSdkError> {
-        let vault = self
-            .vault
-            .as_ref()
-            .ok_or_else(|| DidSdkError::Unsupported("server has no local signer".into()))?;
-        let backend = self.backend.clone();
-        block_on_backend(move || async move { backend.confirm_signing().await })?;
-        let issuer = self.participant_did_value()?.to_string();
-        let key_id = block_on_future(self.active_key())?;
-        let mut vc = vc::build_vc(&issuer, claims, None);
-        let signing_input = vc::vc_signing_input(&vc)?;
-        let signature = block_on_future(vault.sign_checked(
-            &key_id,
-            &signing_input,
-            KeyNamespace::ParticipantDid,
-            KeyAlgorithm::Ed25519,
-        ))
-        .map_err(map_vault_err)?;
-        vc.proof = Some(vc::proof_for(&issuer, vc::now_ts(), &signature.0));
-        Ok(vc)
+        self.issue_vc_local(claims, &[]).map(|(vc, _)| vc)
     }
 
-    fn participant_did_value(&self) -> Result<&str, DidSdkError> {
-        self.participant_did
-            .as_deref()
-            .filter(|did| !did.is_empty())
-            .ok_or_else(|| DidSdkError::ConfigError("server participant_did is required".into()))
+    /// 用本地签名器签发带选择性披露属性的 VC。
+    pub fn issue_selective_vc(
+        &self,
+        claims: serde_json::Value,
+        disclosable: &[String],
+    ) -> Result<(VerifiableCredential, Vec<Disclosure>), DidSdkError> {
+        self.issue_vc_local(claims, disclosable)
     }
+
     fn resolve_did_peer_document(&self, did: &str) -> Result<DidDocument, DidSdkError> {
         let docs = self
             .docs

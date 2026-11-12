@@ -77,6 +77,20 @@ describe("golden vectors", () => {
     }
   });
 
+  test("vp_sd_v1", () => {
+    for (const vector of VECTORS.vp_sd_v1) {
+      const input = vector.input;
+      const output = DidSdk.vpSdV1Bytes(
+        input.holder,
+        input.challenge,
+        input.domain,
+        input.disclosures_hash,
+        input.vc_hashes
+      );
+      expect(output.toString("utf8")).toBe(vector.expected_bytes_utf8);
+    }
+  });
+
   test("governance signing inputs", () => {
     expect(
       DidSdk.participantRegistrationV1Bytes(
@@ -116,6 +130,45 @@ describe("golden vectors", () => {
 });
 
 describe("SDK roundtrip", () => {
+  test("selective disclosure issue/store/VP", async () => {
+    const sdk = new DidSdk({
+      mode: "mock",
+      keyVaultScheme: "memory-keystore",
+      keyVaultPassword: "p",
+      vcStoragePath: tempDir(),
+    });
+    await sdk.generateDidKey();
+    const issued = await sdk.issueSelectiveVc(
+      {
+        type: "IDCardVC",
+        idCardNumber: "123",
+        name: "Alice",
+        gender: "F",
+        birthday: "1990-01-01",
+      },
+      ["name", "gender", "birthday"]
+    );
+    expect(issued.vc.credentialSubject._sd_alg).toBe("sha-256");
+    expect(issued.vc.credentialSubject.name).toBeUndefined();
+    expect(issued.disclosures.length).toBe(3);
+    await sdk.storeVcWithDisclosures(issued.vc, issued.disclosures);
+    const bundle = await sdk.getVcWithDisclosures(issued.vc.anchor_id);
+    expect(bundle.disclosures.length).toBe(3);
+    expect(await sdk.listDisclosableAttributes(issued.vc.anchor_id)).toEqual([
+      "birthday",
+      "gender",
+      "name",
+    ]);
+    const vp = await sdk.buildVpSelective(
+      [{ credential: issued.vc, disclose: ["name"] }],
+      "challenge",
+      "example.com"
+    );
+    expect(vp.disclosures.length).toBe(1);
+    expect(vp.disclosures[0][1]).toBe("name");
+    expect(vp.proof.jws).toBeTruthy();
+  });
+
   test("async API and local VC/VP flow", async () => {
     const sdk = new DidSdk({
       mode: "mock",

@@ -26,7 +26,7 @@
 | K5 | 私钥不出 KeyVault | ✅ | 代码审查；`Keypair` 不 Serialize/Clone/Debug |
 | K6 | 环境变量 / 文件 / 交互输入 | ✅ | `password_sources`；`PasswordSource::Prompt` |
 | K7 | did:key + SS58 原语 | ✅ | `ss58_roundtrip_and_checksum`、`did_key_roundtrip...` |
-| K8 | 7 个签名对象构造函数 | ✅ | `signing_input` 单测 + `tests/vectors` + 三语言绑定 |
+| K8 | 8 个签名对象构造函数（含 vp_sd_v1） | ✅ | `signing_input` 单测 + `tests/vectors` + 三语言绑定 |
 | K9 | 跨 crate 共享 | ✅ | did-sdk / Python / Node 均调用 keyvault-core |
 | K10 | namespace 强制隔离 + 文件头/index 一致 | ✅ | `rejects_invalid_namespace_algorithm_combination`、`index_algorithm_mismatch_is_rejected` |
 | K11 | `sign_checked` 拒绝跨 namespace / algorithm | ✅ | `sign_checked_enforces_namespace_and_algorithm` |
@@ -69,9 +69,9 @@
 | 项 | 状态 | 证据 |
 |---|---|---|
 | Python wheel 构建 | ✅ | 本地 maturin build |
-| Python pytest | ✅ | **10 passed** |
+| Python pytest | ✅ | **13 passed** |
 | Node addon 构建 | ✅ | 本地 napi build |
-| Node vitest | ✅ | **9 passed** |
+| Node vitest | ✅ | **11 passed** |
 | 三语言 golden vector | ✅ | Rust/Python/Node 各自执行 |
 | `.d.ts` 已提交 | ✅ | `bindings/node/index.d.ts` |
 
@@ -79,12 +79,12 @@
 
 | 套件 | 结果 |
 |---|---|
-| `cargo test -p keyvault-core` | **9 单测 + 16 集成 = 25 passed** |
-| `cargo test -p did-sdk` | **1 单测 + 47 集成 = 48 passed** |
+| `cargo test -p keyvault-core` | **12 单测 + 16 集成 = 28 passed** |
+| `cargo test -p did-sdk` | **3 单测 + 52 集成 = 55 passed** |
 | `cargo fmt --all -- --check` | 通过 |
 | `cargo clippy --workspace --exclude did-sdk-python --exclude did-sdk-python-server --exclude did-sdk-node --exclude did-sdk-node-server --all-targets -- -D warnings` | 通过 |
-| Python `pytest` | **10 passed** |
-| Node `vitest` | **9 passed** |
+| Python `pytest` | **13 passed** |
+| Node `vitest` | **11 passed** |
 
 ## 5.1 本轮新增要求
 
@@ -107,6 +107,27 @@
 Server 默认 `key_vault: Some(FileKeystore)`；`key_vault_scheme="none"` 可关闭本地签名器。
 VC 加密密钥默认复用 KeyVault 密码；无 KeyVault 时回退
 `DID_SDK_VC_STORAGE_PASSWORD` / 自动 `.vc_password`。
+
+## 5.3 选择性披露（SD-JWT）
+
+| 编号 | 状态 | 证据 |
+|---|---|---|
+| I1–I6 签发 | ✅ | `issue_selective_vc`、16 字节盐、`_sd`、`_sd_alg`、Disclosure 交付 |
+| D1 绑定加密存储 | ✅ | VC + Disclosures 同一 `DVCS` 信封 |
+| D2 用户选择 | ✅ | `list_disclosable_attributes`；默认 disclose=[] |
+| D3 子集筛选 | ✅ | `build_vp_selective` + `select_disclosures` |
+| D4 VP disclosures | ✅ | `VerifiablePresentation.disclosures` |
+| D5 holder 签名覆盖 | ✅ | `vp_sd_v1` 覆盖 VC 哈希 + Disclosures 哈希 + challenge/domain |
+| V1 VP 签名/challenge | ✅ | `Server::verify_vp` |
+| V2 VC 签名 | ✅ | 复用 `verify_vc` |
+| V3 Disclosure 哈希比对 | ✅ | `sd::verify_disclosures` / `verify_vp` |
+| V4 未披露属性不可见 | ✅ | VP 只携带选中 Disclosure |
+| V5 链上锚定 | ⏳ | 由 chain-sdk Verifier 负责（R1） |
+| V6 篡改检测 | ✅ | `disclosure_hash_mismatch` |
+| V7 重复检测 | ✅ | `disclosure_duplicate` |
+| P1–P3 隐私边界 | ✅ | 独立盐 + 文档边界说明 |
+
+测试：`tests/selective_disclosure.rs`；Python `test_selective_disclosure.py` / `test_server.py`；Node `vectors.test.ts`。
 
 ## 6. GitHub Actions（R1 代码提交 `adf83ee`）
 

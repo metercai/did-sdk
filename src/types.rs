@@ -1,6 +1,10 @@
 //! 公开数据模型（更新版规格：Client/Server + 三种 DID 方法）。
 
-use serde::{Deserialize, Serialize};
+use serde::de::Error as _;
+use serde::ser::SerializeTuple;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::DidSdkError;
 
 /// 签名上下文。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -176,6 +180,86 @@ pub struct VcVerificationResult {
     pub reason: Option<String>,
 }
 
+/// SD-JWT Disclosure：`[salt(base64url), claim_name, claim_value]`。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Disclosure {
+    /// 盐（base64url，无 padding）。
+    pub salt: String,
+    /// 属性名。
+    pub name: String,
+    /// 属性值。
+    pub value: serde_json::Value,
+}
+
+impl Disclosure {
+    /// 生成新盐并创建 Disclosure。
+    pub fn generate(
+        name: impl Into<String>,
+        value: serde_json::Value,
+    ) -> Result<Self, DidSdkError> {
+        let salt = keyvault_core::sd::generate_salt()
+            .map_err(|error| DidSdkError::SigningFailed(error.to_string()))?;
+        Ok(Self {
+            salt: keyvault_core::sd::base64url_encode(&salt),
+            name: name.into(),
+            value,
+        })
+    }
+
+    /// 重算 `_sd` 中的哈希字符串。
+    pub fn hash_string(&self) -> Result<String, DidSdkError> {
+        let salt = keyvault_core::sd::base64url_decode(&self.salt)
+            .map_err(|error| DidSdkError::InvalidArgument(error.to_string()))?;
+        keyvault_core::sd::disclosure_hash_string(&salt, &self.name, &self.value)
+            .map_err(|error| DidSdkError::SigningFailed(error.to_string()))
+    }
+}
+
+impl Serialize for Disclosure {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut tuple = serializer.serialize_tuple(3)?;
+        tuple.serialize_element(&self.salt)?;
+        tuple.serialize_element(&self.name)?;
+        tuple.serialize_element(&self.value)?;
+        tuple.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Disclosure {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let (salt, name, value) = <(String, String, serde_json::Value)>::deserialize(deserializer)?;
+        if salt.is_empty() || name.is_empty() {
+            return Err(D::Error::custom("disclosure salt/name must not be empty"));
+        }
+        Ok(Self { salt, name, value })
+    }
+}
+
+/// 选择性 VP 请求：只披露 `disclose` 中列出的属性。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SelectiveVpRequest {
+    /// VC。
+    pub credential: VerifiableCredential,
+    /// 要披露的属性名（默认空 = 全部隐藏）。
+    #[serde(default)]
+    pub disclose: Vec<String>,
+}
+
+/// VP 验证结果（SD-JWT 扩展）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VpVerificationResult {
+    /// 是否通过。
+    pub verified: bool,
+    /// holder DID 是否解析成功。
+    pub holder_resolved: bool,
+    /// 各 VC 的验证结果。
+    pub credentials: Vec<VcVerificationResult>,
+    /// 已核验的 Disclosure 数量。
+    pub disclosure_count: usize,
+    /// 失败原因。
+    pub reason: Option<String>,
+}
+
 /// VC/VP proof（外部 Signer 注入）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Proof {
@@ -239,6 +323,9 @@ pub struct VerifiablePresentation {
     pub challenge: String,
     /// domain。
     pub domain: String,
+    /// SD-JWT Disclosures；`None` 表示非选择性披露 VP。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disclosures: Option<Vec<Disclosure>>,
     /// proof。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proof: Option<Proof>,

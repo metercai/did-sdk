@@ -43,7 +43,7 @@ DidSdk<Server> ── vault: 可选 FileKeystore(participant-did/) ── 外部
 - `KeyNamespace`（ChainAccount / ParticipantDid / ClientDid）× `KeyAlgorithm`（Ed25519 / Sr25519）。
 - `KeyVault::{generate, list_keys, sign_checked}`；跨 namespace/algorithm 拒绝。
 - `FileKeystore` v2：namespace 子目录 + `.enc` + index v2 + 文件头 namespace/algorithm。
-- SS58、7 个签名输入、Argon2id + ChaCha20-Poly1305。
+- SS58、8 个签名输入（含 vp_sd_v1）、Argon2id + ChaCha20-Poly1305。
 
 ## 4. Client / Server 双产物
 
@@ -61,16 +61,26 @@ DidSdk<Server> ── vault: 可选 FileKeystore(participant-did/) ── 外部
 - 默认复用 KeyVault 密码；无 KeyVault 时回退 `DID_SDK_VC_STORAGE_PASSWORD` / 自动 `.vc_password`（0600）。
 - 旧明文 VC 读取时自动迁移为密文。
 
+## 5.2 选择性披露（SD-JWT）
+
+- `keyvault-core::sd`：16 字节 CSPRNG 盐、base64url、SHA-256 盐化哈希。
+- `did-sdk`：`_sd`/`_sd_alg`、`Disclosure`、`issue_selective_vc`、
+  `store_vc_with_disclosures`、`build_vp_selective`、`verify_vp`。
+- VC 与 Disclosures 同一加密信封；未披露属性不出现在 VP。
+- `vp_sd_v1` 覆盖 VC 原文哈希 + Disclosures 哈希 + challenge + domain。
+- 错误码：`disclosure_hash_mismatch` / `disclosure_duplicate` /
+  `disclosure_missing` / `sd_alg_unsupported`。
+
 ## 6. 本地验证
 
 ```text
-cargo test -p keyvault-core           # 9 unit + 16 integration = 25 passed
-cargo test -p did-sdk                 # 1 unit + 47 integration = 48 passed
+cargo test -p keyvault-core           # 12 unit + 16 integration = 28 passed
+cargo test -p did-sdk                 # 3 unit + 52 integration = 55 passed
 cargo fmt --all -- --check            # passed
 cargo clippy --workspace --exclude did-sdk-python --exclude did-sdk-python-server --exclude did-sdk-node --exclude did-sdk-node-server --all-targets -- -D warnings  # passed
-pytest bindings/python/tests          # 9 passed
-pytest bindings/python-server/tests   # 1 passed
-npm test (bindings/node)              # 8 passed
+pytest bindings/python/tests          # 11 passed
+pytest bindings/python-server/tests   # 2 passed
+npm test (bindings/node)              # 10 passed
 npm test (bindings/node-server)       # 1 passed
 cargo tree -p did-sdk | grep subxt    # 无输出
 ```

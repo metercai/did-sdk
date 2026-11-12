@@ -7,6 +7,7 @@
 //! - [`signing_input`] 是三语言共享的签名对象构造唯一实现。
 
 pub mod crypto;
+pub mod sd;
 pub mod signing_input;
 /// KeyVault trait 与错误类型。
 pub mod trait_;

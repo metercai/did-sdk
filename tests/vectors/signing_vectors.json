@@ -104,5 +104,20 @@
       },
       "expected_bytes_utf8": "GatewayAccess-v1\ndid:key:z6MkAgent\nagent@example.com\nchallenge-123"
     }
+  ],
+  "vp_sd_v1": [
+    {
+      "input": {
+        "holder": "did:key:zHolder",
+        "challenge": "c",
+        "domain": "example.com",
+        "disclosures_hash": "dh",
+        "vc_hashes": [
+          "h1",
+          "h2"
+        ]
+      },
+      "expected_bytes_utf8": "VP-SD-v1\ndid:key:zHolder\nc\nexample.com\ndh\nh1\nh2"
+    }
   ]
 }

@@ -330,6 +330,20 @@ DID 解析本地 TTL 缓存（默认 600 秒）。`did:web` 解析直连 HTTPS�
 
 存储加密密钥默认复用 `KeyVault` 密码（Server 默认 `FileKeystore`）；无 KeyVault 时使用 `DID_SDK_VC_STORAGE_PASSWORD` 或自动 `.vc_password`。文件为 `DVCS` 密文。
 
+### 8.1 选择性披露（SD-JWT 附件）
+
+- 签发：`issue_selective_vc(claims, disclosable)` 生成 `_sd` / `_sd_alg`（sha-256）与
+  `Disclosure [salt, name, value]`；每个属性独立 16 字节盐。
+- 存储：`store_vc_with_disclosures` 将 VC 与 Disclosures 放入同一 `DVCS` 加密信封；
+  `get_vc_with_disclosures` / `list_disclosable_attributes` 供用户选择。
+- 出示：`build_vp_selective` 只筛选用户选中的 Disclosure；`disclose=[]` 表示全部隐藏；
+  VP 增加 `disclosures` 字段，签名对象为 `vp_sd_v1`（覆盖 VC 原文哈希、Disclosures 哈希、
+  challenge、domain）。
+- 验证：`DidSdk<Server>::verify_vp` 校验 holder 签名、challenge、VC 签名、Disclosure 哈希、
+  重复披露与 `_sd_alg`；链上锚定仍由 `chain-sdk` 负责。
+- 错误码：`disclosure_hash_mismatch` / `disclosure_duplicate` / `disclosure_missing` /
+  `sd_alg_unsupported`。
+
 ## 9. 两种后端模式对比
 
 | 维度 | Mock | Centralized |
@@ -376,6 +390,10 @@ DID 解析本地 TTL 缓存（默认 600 秒）。`did:web` 解析直连 HTTPS�
 | D16 | 无 `subxt` 依赖 | `cargo tree -p did-sdk` 与 Cargo.toml 均无 subxt |
 | D17 | 无链上查询接口 | 无 `get_anchor`、无 ChainBackend |
 | D18 | 锚定职责边界 | 签名/验签不依赖锚定查询结果 |
+| SD-I1–I6 | 签发侧 | 盐化哈希、`_sd`、独立盐、Disclosure、密文交付 |
+| SD-D1–D5 | 出示侧 | 绑定加密存储、属性选择、子集筛选、VP `disclosures`、holder 签名覆盖 |
+| SD-V1–V7 | 验证侧 | holder/VC 签名、哈希比对、隐藏属性、篡改/重复检测 |
+| SD-P1–P3 | 隐私边界 | 跨 VC 盐不同、同 VC 可关联、字典攻击防护 |
 
 ## 12. 交付物
 

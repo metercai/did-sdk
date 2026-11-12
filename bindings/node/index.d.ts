@@ -36,6 +36,12 @@ export declare class ServerDidSdk {
   resolveDid(did: string): any | null
   signWithParticipantKey(message: Buffer, context?: JsSigningContext | undefined | null): Promise<Buffer>
   issueSelfAssertedVc(claims: any): Promise<any>
+  issueSelectiveVc(claims: any, disclosable: Array<string>): Promise<any>
+  storeVcWithDisclosures(vc: any, disclosures: Array<any>): Promise<void>
+  getVcWithDisclosures(anchorId: string): Promise<any | null>
+  listDisclosableAttributes(anchorId: string): Promise<Array<string>>
+  buildVpSelective(requests: Array<any>, challenge: string, domain: string): Promise<any>
+  verifyVp(vp: any, expectedChallenge: string): Promise<any>
   resolvedConfig(): any
 }
 /** did-sdk Client Node 客户端。 */
@@ -57,11 +63,17 @@ export declare class DidSdk {
   buildDidSignatureHeader(from: string, anchorId: string, bodyHash: string, rcptHash: string): Promise<string>
   verifyDidSignatureHeader(header: string, from: string, bodyHash: string, rcptHash: string): any
   signIssueAuthorization(subjectDid: string, vcType: string, vcHash: string, timestamp: number): Promise<Buffer>
+  issueSelectiveVc(claims: any, disclosable: Array<string>): Promise<any>
+  storeVcWithDisclosures(vc: any, disclosures: Array<any>): Promise<void>
+  getVcWithDisclosures(anchorId: string): Promise<any | null>
+  listDisclosableAttributes(anchorId: string): Promise<Array<string>>
+  buildVpSelective(requests: Array<any>, challenge: string, domain: string): Promise<any>
   resolvedConfig(): any
   static didSignatureV1Bytes(did: string, from: string, timestamp: number, anchorRef: string, bodyHash: string, rcptHash: string): Buffer
   static issuedVcV1Bytes(issuerDid: string, subjectDid: string, vcType: string, vcHash: string): Buffer
   static vpV1Bytes(holder: string, challenge: string, domain: string, vcHashes: Array<string>): Buffer
   static gatewayAccessV1Bytes(did: string, agentEmail: string, challenge: string): Buffer
+  static vpSdV1Bytes(holder: string, challenge: string, domain: string, disclosuresHash: string, vcHashes: Array<string>): Buffer
   static participantRegistrationV1Bytes(participantId: number, controllerDid: string, operator: string, chainRole: string, businessTypes: Array<string>, authorizedDomains: Array<string>): Buffer
   static operatorRotationV1Bytes(participantId: number, newOperator: string, timestamp: number): Buffer
   static controllerDidRotationV1Bytes(participantId: number, newControllerDid: string, timestamp: number): Buffer

@@ -5,6 +5,7 @@ import hashlib
 import pathlib
 import tempfile
 
+from did_sdk import DidSdk
 from did_sdk_server import ServerDidSdk
 
 
@@ -49,5 +50,40 @@ def test_server_assemble_sign_store_encrypted():
             raw = file.read_bytes()
             assert raw.startswith(b"DVCS")
             assert b"issuer" not in raw
+
+    asyncio.run(run())
+
+
+def test_verify_selective_vp_from_client():
+    async def run():
+        with tempfile.TemporaryDirectory() as tmp:
+            client = DidSdk(
+                mode="mock",
+                key_vault_scheme="memory-keystore",
+                key_vault_password="p",
+                vc_storage_path=tmp + "/client",
+            )
+            await client.generate_did_key()
+            issued = await client.issue_selective_vc(
+                {"type": "IDCardVC", "name": "Alice", "gender": "F"},
+                ["name", "gender"],
+            )
+            await client.store_vc_with_disclosures(
+                issued["vc"], issued["disclosures"]
+            )
+            vp = await client.build_vp_selective(
+                [{"credential": issued["vc"], "disclose": ["name"]}],
+                "challenge",
+                "example.com",
+            )
+            server = ServerDidSdk(
+                "did:web:issuer.example.com",
+                mode="mock",
+                key_vault_scheme="none",
+                vc_storage_path=tmp + "/server",
+            )
+            result = await server.verify_vp(vp, "challenge")
+            assert result["verified"] is True
+            assert result["disclosure_count"] == 1
 
     asyncio.run(run())

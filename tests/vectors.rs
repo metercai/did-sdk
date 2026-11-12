@@ -192,3 +192,28 @@ fn gateway_access_v1_bytes() {
         );
     }
 }
+
+#[test]
+fn vp_sd_v1_bytes() {
+    let json = vectors();
+    for case in json["vp_sd_v1"].as_array().expect("array") {
+        let input = &case["input"];
+        let hashes = input["vc_hashes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap().to_string())
+            .collect::<Vec<_>>();
+        let bytes = keyvault_core::signing_input::vp_sd_v1(
+            input["holder"].as_str().unwrap(),
+            input["challenge"].as_str().unwrap(),
+            input["domain"].as_str().unwrap(),
+            input["disclosures_hash"].as_str().unwrap(),
+            &hashes,
+        );
+        assert_eq!(
+            String::from_utf8(bytes).unwrap(),
+            case["expected_bytes_utf8"].as_str().unwrap()
+        );
+    }
+}

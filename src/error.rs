@@ -30,6 +30,18 @@ pub enum DidSdkError {
     /// VC 验证失败。
     #[error("VC verification failed: {0}")]
     VcVerificationFailed(String),
+    /// Disclosure 哈希不匹配。
+    #[error("disclosure_hash_mismatch: {0}")]
+    DisclosureHashMismatch(String),
+    /// 同一属性重复披露。
+    #[error("disclosure_duplicate: {0}")]
+    DisclosureDuplicate(String),
+    /// 请求/缺少必要的 Disclosure。
+    #[error("disclosure_missing: {0}")]
+    DisclosureMissing(String),
+    /// 不支持的 `_sd_alg`。
+    #[error("sd_alg_unsupported: {0}")]
+    SdAlgUnsupported(String),
     /// 后端/存储不可用。
     #[error("Backend unavailable: {0}")]
     BackendUnavailable(String),

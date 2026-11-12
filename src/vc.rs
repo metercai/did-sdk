@@ -10,7 +10,7 @@ use keyvault_core::signing_input::{issued_vc_v1, vp_v1};
 use zeroize::Zeroize;
 
 use crate::storage::atomic_write;
-use crate::{DidSdkError, Proof, VerifiableCredential, VerifiablePresentation};
+use crate::{DidSdkError, Disclosure, Proof, VerifiableCredential, VerifiablePresentation};
 
 const VC_STORE_MAGIC: &[u8; 4] = b"DVCS";
 const VC_META_MAGIC: &[u8; 4] = b"DVCM";
@@ -22,6 +22,13 @@ const ARGON2_M_COST: u32 = 65536;
 const ARGON2_T_COST: u32 = 3;
 const ARGON2_P_COST: u32 = 1;
 const VC_PASSWORD_ENV: &str = "DID_SDK_VC_STORAGE_PASSWORD";
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct StoredVc {
+    pub(crate) vc: VerifiableCredential,
+    #[serde(default)]
+    pub(crate) disclosures: Vec<Disclosure>,
+}
 
 /// 加密 VC 文件存储。
 ///
@@ -119,52 +126,72 @@ impl VcStore {
         Ok(ciphertext)
     }
 
-    fn load_vc(&self, path: &Path, anchor_id: &str) -> Result<VerifiableCredential, DidSdkError> {
+    fn load_bundle(&self, path: &Path, anchor_id: &str) -> Result<StoredVc, DidSdkError> {
         let raw = std::fs::read(path).map_err(|error| {
             DidSdkError::BackendUnavailable(format!("read {}: {error}", path.display()))
         })?;
-        // 兼容极早期明文文件：读取后立即重新加密。
+        // 兼容极早期明文文件；读取后立即重新加密。
         if raw.first() == Some(&b'{') {
-            let vc: VerifiableCredential = serde_json::from_slice(&raw).map_err(|error| {
-                DidSdkError::InvalidArgument(format!("parse plaintext VC: {error}"))
-            })?;
-            self.put(&vc)?;
+            let bundle = parse_bundle(&raw, path)?;
+            self.put_bundle(&bundle.vc, &bundle.disclosures)?;
             tracing::warn!(path = %path.display(), "migrated plaintext VC to encrypted form");
-            return Ok(vc);
+            return Ok(bundle);
         }
         let plaintext = self.decrypt(&raw)?;
-        let vc: VerifiableCredential = serde_json::from_slice(&plaintext).map_err(|error| {
-            DidSdkError::InvalidArgument(format!("parse VC {}: {error}", path.display()))
-        })?;
-        if vc.anchor_id.as_deref() != Some(anchor_id) {
+        let bundle = parse_bundle(&plaintext, path)?;
+        if bundle.vc.anchor_id.as_deref() != Some(anchor_id) {
             return Err(DidSdkError::InvalidArgument(format!(
                 "VC anchor_id mismatch for {anchor_id}"
             )));
         }
-        Ok(vc)
+        Ok(bundle)
     }
 
-    pub(crate) fn put(&self, vc: &VerifiableCredential) -> Result<(), DidSdkError> {
+    pub(crate) fn put_bundle(
+        &self,
+        vc: &VerifiableCredential,
+        disclosures: &[Disclosure],
+    ) -> Result<(), DidSdkError> {
         let anchor_id = vc
             .anchor_id
             .as_deref()
             .ok_or_else(|| DidSdkError::InvalidArgument("VC is missing anchor_id".into()))?;
-        let json = serde_json::to_vec(vc)
+        let bundle = StoredVc {
+            vc: vc.clone(),
+            disclosures: disclosures.to_vec(),
+        };
+        let json = serde_json::to_vec(&bundle)
             .map_err(|error| DidSdkError::InvalidArgument(format!("serialize VC: {error}")))?;
         let encrypted = self.encrypt(&json)?;
         atomic_write(&self.path_for(anchor_id), &encrypted)
             .map_err(|error| DidSdkError::BackendUnavailable(format!("write VC: {error}")))
     }
 
+    pub(crate) fn put(&self, vc: &VerifiableCredential) -> Result<(), DidSdkError> {
+        self.put_bundle(vc, &[])
+    }
+
     pub(crate) fn get(&self, anchor_id: &str) -> Result<Option<VerifiableCredential>, DidSdkError> {
+        Ok(self.get_bundle(anchor_id)?.map(|bundle| bundle.vc))
+    }
+
+    pub(crate) fn get_bundle(&self, anchor_id: &str) -> Result<Option<StoredVc>, DidSdkError> {
         let path = self.path_for(anchor_id);
         if !path.exists() {
             return Ok(None);
         }
-        self.load_vc(&path, anchor_id).map(Some)
+        self.load_bundle(&path, anchor_id).map(Some)
     }
 
     pub(crate) fn list(&self) -> Result<Vec<VerifiableCredential>, DidSdkError> {
+        Ok(self
+            .list_bundles()?
+            .into_iter()
+            .map(|bundle| bundle.vc)
+            .collect())
+    }
+
+    pub(crate) fn list_bundles(&self) -> Result<Vec<StoredVc>, DidSdkError> {
         let mut out = Vec::new();
         let entries = match std::fs::read_dir(&self.root) {
             Ok(entries) => entries,
@@ -187,26 +214,23 @@ impl VcStore {
                 .and_then(|stem| stem.to_str())
                 .unwrap_or_default()
                 .to_string();
-            // 文件名是 anchor_id 的哈希，无法反推；读取后使用 VC 自己的 anchor_id 校验。
             match std::fs::read(&path) {
-                Ok(raw) if raw.first() == Some(&b'{') => {
-                    match serde_json::from_slice::<VerifiableCredential>(&raw) {
-                        Ok(vc) => {
-                            if let Err(error) = self.put(&vc) {
-                                tracing::warn!(path = %path.display(), %error, "re-encrypt VC failed");
-                            }
-                            out.push(vc);
+                Ok(raw) if raw.first() == Some(&b'{') => match parse_bundle(&raw, &path) {
+                    Ok(bundle) => {
+                        if let Err(error) = self.put_bundle(&bundle.vc, &bundle.disclosures) {
+                            tracing::warn!(path = %path.display(), %error, "re-encrypt VC failed");
                         }
-                        Err(error) => {
-                            tracing::warn!(path = %path.display(), %error, "skip invalid VC file");
-                        }
+                        out.push(bundle);
                     }
-                }
-                Ok(raw) => match self.decrypt(&raw).and_then(|plain| {
-                    serde_json::from_slice::<VerifiableCredential>(&plain)
-                        .map_err(|error| DidSdkError::InvalidArgument(format!("parse VC: {error}")))
-                }) {
-                    Ok(vc) => out.push(vc),
+                    Err(error) => {
+                        tracing::warn!(path = %path.display(), %error, "skip invalid VC file");
+                    }
+                },
+                Ok(raw) => match self
+                    .decrypt(&raw)
+                    .and_then(|plain| parse_bundle(&plain, &path))
+                {
+                    Ok(bundle) => out.push(bundle),
                     Err(error) => {
                         tracing::warn!(path = %path.display(), %error, "skip invalid VC file");
                     }
@@ -217,7 +241,7 @@ impl VcStore {
             }
             let _ = anchor_id;
         }
-        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out.sort_by(|a, b| a.vc.id.cmp(&b.vc.id));
         Ok(out)
     }
 
@@ -233,6 +257,19 @@ impl VcStore {
             ))),
         }
     }
+}
+
+fn parse_bundle(bytes: &[u8], path: &Path) -> Result<StoredVc, DidSdkError> {
+    if let Ok(bundle) = serde_json::from_slice::<StoredVc>(bytes) {
+        return Ok(bundle);
+    }
+    let vc: VerifiableCredential = serde_json::from_slice(bytes).map_err(|error| {
+        DidSdkError::InvalidArgument(format!("parse VC {}: {error}", path.display()))
+    })?;
+    Ok(StoredVc {
+        vc,
+        disclosures: Vec::new(),
+    })
 }
 
 fn resolve_vc_password(root: &Path) -> Result<String, DidSdkError> {
@@ -453,6 +490,7 @@ pub(crate) fn build_vp_object(
     vcs: Vec<VerifiableCredential>,
     challenge: &str,
     domain: &str,
+    disclosures: Option<Vec<Disclosure>>,
     proof: Option<Proof>,
 ) -> VerifiablePresentation {
     VerifiablePresentation {
@@ -462,6 +500,7 @@ pub(crate) fn build_vp_object(
         verifiable_credential: vcs,
         challenge: challenge.to_string(),
         domain: domain.to_string(),
+        disclosures,
         proof,
     }
 }

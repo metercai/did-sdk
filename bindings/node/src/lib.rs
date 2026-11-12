@@ -10,8 +10,8 @@ use secrecy::SecretString;
 
 use did_sdk::config::{ConfigOverrides, resolve_config};
 use did_sdk::{
-    ClientConfig, DidSdkError as CoreError, DidSdkMode, PeerNumalgo, Proof, ServerConfig,
-    VerifiableCredential, build_client_sdk, build_server_sdk,
+    ClientConfig, DidSdkError as CoreError, DidSdkMode, Disclosure, PeerNumalgo, Proof,
+    SelectiveVpRequest, ServerConfig, VerifiableCredential, build_client_sdk, build_server_sdk,
 };
 
 type Sdk = did_sdk::DidSdk<did_sdk::Client>;
@@ -57,6 +57,10 @@ fn to_napi_err(error: CoreError) -> napi::Error {
     let code = match &error {
         CoreError::UserRejected => "UserRejected",
         CoreError::VcNotFound(_) => "NotFound",
+        CoreError::DisclosureHashMismatch(_) => "DisclosureHashMismatch",
+        CoreError::DisclosureDuplicate(_) => "DisclosureDuplicate",
+        CoreError::DisclosureMissing(_) => "DisclosureMissing",
+        CoreError::SdAlgUnsupported(_) => "SdAlgUnsupported",
         CoreError::InvalidArgument(_)
         | CoreError::UnsupportedDidMethod(_)
         | CoreError::DidResolutionFailed(_) => "InvalidArgument",
@@ -294,6 +298,103 @@ impl ServerDidSdk {
     }
 
     #[napi]
+    pub async fn issue_selective_vc(
+        &self,
+        claims: serde_json::Value,
+        disclosable: Vec<String>,
+    ) -> napi::Result<serde_json::Value> {
+        let (vc, disclosures) = self
+            .inner
+            .issue_selective_vc(claims, &disclosable)
+            .map_err(to_napi_err)?;
+        Ok(serde_json::json!({"vc": vc, "disclosures": disclosures}))
+    }
+
+    #[napi]
+    pub async fn store_vc_with_disclosures(
+        &self,
+        vc: serde_json::Value,
+        disclosures: Vec<serde_json::Value>,
+    ) -> napi::Result<()> {
+        let vc: VerifiableCredential = serde_json::from_value(vc)
+            .map_err(|error| napi::Error::from_reason(format!("InvalidArgument: {error}")))?;
+        let disclosures: Vec<Disclosure> = disclosures
+            .into_iter()
+            .map(|value| {
+                serde_json::from_value(value)
+                    .map_err(|error| napi::Error::from_reason(format!("InvalidArgument: {error}")))
+            })
+            .collect::<napi::Result<Vec<_>>>()?;
+        self.inner
+            .store_vc_with_disclosures(vc, disclosures)
+            .await
+            .map_err(to_napi_err)
+    }
+
+    #[napi]
+    pub async fn get_vc_with_disclosures(
+        &self,
+        anchor_id: String,
+    ) -> napi::Result<Option<serde_json::Value>> {
+        let bundle = self
+            .inner
+            .get_vc_with_disclosures(&anchor_id)
+            .await
+            .map_err(to_napi_err)?;
+        Ok(bundle
+            .map(|(vc, disclosures)| serde_json::json!({"vc": vc, "disclosures": disclosures})))
+    }
+
+    #[napi]
+    pub async fn list_disclosable_attributes(
+        &self,
+        anchor_id: String,
+    ) -> napi::Result<Vec<String>> {
+        self.inner
+            .list_disclosable_attributes(&anchor_id)
+            .await
+            .map_err(to_napi_err)
+    }
+
+    #[napi]
+    pub async fn build_vp_selective(
+        &self,
+        requests: Vec<serde_json::Value>,
+        challenge: String,
+        domain: String,
+    ) -> napi::Result<serde_json::Value> {
+        let requests = requests
+            .into_iter()
+            .map(|value| {
+                serde_json::from_value::<SelectiveVpRequest>(value)
+                    .map_err(|error| napi::Error::from_reason(format!("InvalidArgument: {error}")))
+            })
+            .collect::<napi::Result<Vec<_>>>()?;
+        let vp = self
+            .inner
+            .build_vp_selective(requests, &challenge, &domain)
+            .await
+            .map_err(to_napi_err)?;
+        to_json(&vp)
+    }
+
+    #[napi]
+    pub async fn verify_vp(
+        &self,
+        vp: serde_json::Value,
+        expected_challenge: String,
+    ) -> napi::Result<serde_json::Value> {
+        let vp: did_sdk::VerifiablePresentation = serde_json::from_value(vp)
+            .map_err(|error| napi::Error::from_reason(format!("InvalidArgument: {error}")))?;
+        let result = self
+            .inner
+            .verify_vp(&vp, &expected_challenge)
+            .await
+            .map_err(to_napi_err)?;
+        to_json(&result)
+    }
+
+    #[napi]
     pub fn resolved_config(&self) -> napi::Result<serde_json::Value> {
         to_json(&self.config)
     }
@@ -480,6 +581,87 @@ impl DidSdk {
     }
 
     #[napi]
+    pub async fn issue_selective_vc(
+        &self,
+        claims: serde_json::Value,
+        disclosable: Vec<String>,
+    ) -> napi::Result<serde_json::Value> {
+        let (vc, disclosures) = self
+            .inner
+            .issue_selective_vc(claims, &disclosable)
+            .map_err(to_napi_err)?;
+        Ok(serde_json::json!({"vc": vc, "disclosures": disclosures}))
+    }
+
+    #[napi]
+    pub async fn store_vc_with_disclosures(
+        &self,
+        vc: serde_json::Value,
+        disclosures: Vec<serde_json::Value>,
+    ) -> napi::Result<()> {
+        let vc: VerifiableCredential = serde_json::from_value(vc)
+            .map_err(|error| napi::Error::from_reason(format!("InvalidArgument: {error}")))?;
+        let disclosures: Vec<Disclosure> = disclosures
+            .into_iter()
+            .map(|value| {
+                serde_json::from_value(value)
+                    .map_err(|error| napi::Error::from_reason(format!("InvalidArgument: {error}")))
+            })
+            .collect::<napi::Result<Vec<_>>>()?;
+        self.inner
+            .store_vc_with_disclosures(vc, disclosures)
+            .await
+            .map_err(to_napi_err)
+    }
+
+    #[napi]
+    pub async fn get_vc_with_disclosures(
+        &self,
+        anchor_id: String,
+    ) -> napi::Result<Option<serde_json::Value>> {
+        let bundle = self
+            .inner
+            .get_vc_with_disclosures(&anchor_id)
+            .await
+            .map_err(to_napi_err)?;
+        Ok(bundle
+            .map(|(vc, disclosures)| serde_json::json!({"vc": vc, "disclosures": disclosures})))
+    }
+
+    #[napi]
+    pub async fn list_disclosable_attributes(
+        &self,
+        anchor_id: String,
+    ) -> napi::Result<Vec<String>> {
+        self.inner
+            .list_disclosable_attributes(&anchor_id)
+            .await
+            .map_err(to_napi_err)
+    }
+
+    #[napi]
+    pub async fn build_vp_selective(
+        &self,
+        requests: Vec<serde_json::Value>,
+        challenge: String,
+        domain: String,
+    ) -> napi::Result<serde_json::Value> {
+        let requests = requests
+            .into_iter()
+            .map(|value| {
+                serde_json::from_value::<SelectiveVpRequest>(value)
+                    .map_err(|error| napi::Error::from_reason(format!("InvalidArgument: {error}")))
+            })
+            .collect::<napi::Result<Vec<_>>>()?;
+        let vp = self
+            .inner
+            .build_vp_selective(requests, &challenge, &domain)
+            .await
+            .map_err(to_napi_err)?;
+        to_json(&vp)
+    }
+
+    #[napi]
     pub fn resolved_config(&self) -> napi::Result<serde_json::Value> {
         to_json(&self.config)
     }
@@ -536,6 +718,23 @@ impl DidSdk {
             &did,
             &agent_email,
             &challenge,
+        ))
+    }
+
+    #[napi(js_name = "vpSdV1Bytes")]
+    pub fn vp_sd_v1_bytes(
+        holder: String,
+        challenge: String,
+        domain: String,
+        disclosures_hash: String,
+        vc_hashes: Vec<String>,
+    ) -> Buffer {
+        Buffer::from(keyvault_core::signing_input::vp_sd_v1(
+            &holder,
+            &challenge,
+            &domain,
+            &disclosures_hash,
+            &vc_hashes,
         ))
     }
 

@@ -11,6 +11,7 @@ DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` �
 
 > **当前状态：已按更新版规格重构；首个版本 [`v0.1.0`](https://github.com/metercai/did-sdk/releases/tag/v0.1.0) 已发布。**
 > - 规格：[`01-DidSdk接口契约与实现规格书1.md`](docs/01-DidSdk接口契约与实现规格书1.md) / [`04-keyvault-core_crate规格书1.md`](docs/04-keyvault-core_crate规格书1.md)
+> - 选择性披露：[`docs/VC选择性披露特性补充附件.md`](docs/VC选择性披露特性补充附件.md)
 > - R1 修订：[`docs/did-sdk移除链上查询与subxt依赖的修订.md`](docs/did-sdk移除链上查询与subxt依赖的修订.md)
 > - 实施/迁移说明：[`docs/implementation-report.md`](docs/implementation-report.md)
 > - 验收清单：[`docs/acceptance-checklist.md`](docs/acceptance-checklist.md)
@@ -239,7 +240,7 @@ console.log(did, peer, sig.length, vc.proof.jws);
 | `build_vp` | 是（本地签名） | 有本地签名器时签名；否则返回无 proof 的 VP |
 | `issue_self_asserted_vc` | 是 | 配置本地签名器时可用 |
 | `assemble_vc_with_proof` | — | 是（外部 `Proof` 注入） |
-| `verify_vc` | — | 是（issuer 解析 + 签名 + 有效期 + 锚定） |
+| `verify_vc` | — | 是（issuer 解析 + 签名 + 有效期；不做链上锚定查询） |
 
 VC 的 `proof` 结构：
 
@@ -251,6 +252,37 @@ VC 的 `proof` 结构：
   "jws": "<base58 signature>"
 }
 ```
+
+### 5.1 选择性披露（SD-JWT）
+
+支持在 `credentialSubject` 中生成 `_sd` / `_sd_alg`，把可披露属性移出 VC 原文，
+并与 Disclosures 绑定加密存储：
+
+```rust
+use did_sdk::SelectiveVpRequest;
+
+let (vc, disclosures) = sdk.issue_selective_vc(
+    serde_json::json!({"type": "IDCardVC", "name": "Alice", "gender": "F"}),
+    &["name".into(), "gender".into()],
+)?;
+sdk.store_vc_with_disclosures(vc.clone(), disclosures).await?;
+
+// 用户只选择 name；disclose 为空表示全部隐藏
+let vp = sdk.build_vp_selective(
+    vec![SelectiveVpRequest { credential: vc, disclose: vec!["name".into()] }],
+    "challenge-1",
+    "example.com",
+).await?;
+
+// 验证方（Server）
+let result = server.verify_vp(&vp, "challenge-1").await?;
+assert!(result.verified);
+```
+
+- 每张 VC、每个属性独立 16 字节 CSPRNG 盐；
+- `H = SHA-256(base64url(salt) || base64url(name) || base64url(value))`；
+- VP 的 `disclosures` 字段 + `vp_sd_v1` 签名覆盖 VC 原文、Disclosures、challenge、domain；
+- 未披露属性对验证方不可见；同一 VC 跨出示可关联与跨验证方合谋是 SD-JWT 固有边界。
 
 ---
 
