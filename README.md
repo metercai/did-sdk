@@ -6,7 +6,8 @@ DID SDK：一个 Rust 核心（Linux musl 完全静态）+ Python wheel + Node �
 > **当前状态：Rust 核心、keyvault-core、Python/Node 绑定已实现并通过本地测试。**
 > 实施计划与评审结论见 [`docs/implementation-plan.md`](docs/implementation-plan.md)，
 > 验收证据见 [`docs/acceptance-checklist.md`](docs/acceptance-checklist.md)，
-> 阶段报告见 [`docs/implementation-report.md`](docs/implementation-report.md)。
+> 阶段报告见 [`docs/implementation-report.md`](docs/implementation-report.md)，
+> CI 接入步骤见 [`docs/ci-setup.md`](docs/ci-setup.md)。
 > 跨平台（Linux musl / Windows）构建统一由 GitHub Actions runner 完成，本地只做
 > macOS arm64 验证；首次推送后以 CI 结果为准。
 

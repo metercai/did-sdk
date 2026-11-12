@@ -76,6 +76,7 @@
 | 验收清单逐项有命令输出摘要 | ✅ | 本文件 |
 | LICENSE 文件 | ✅ | [`LICENSE`](../LICENSE)（Apache-2.0） |
 | CI workflow YAML 语法 | ✅ | `actionlint -color .github/workflows/*.yml` → exit 0 |
+| CI 接入 runbook | ✅ | [`docs/ci-setup.md`](ci-setup.md) |
 | Shell 脚本语法 | ✅ | `bash -n scripts/*.sh` 全部通过 |
 
 ## 6. 已知未验证项（需外部条件）
