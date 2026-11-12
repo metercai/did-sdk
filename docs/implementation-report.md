@@ -81,7 +81,15 @@ bash scripts/cross-lang-vectors.sh
 
 Rust/Python/Node 都读取 `tests/vectors/signing_vectors.json`，脚本退出码 0。
 
-### 2.5 原生可执行
+### 2.5 CI 与脚本静态检查
+
+```text
+actionlint -color .github/workflows/*.yml   # exit 0
+bash -n scripts/*.sh                        # 全部通过
+python -c 'yaml.safe_load(...)'             # 5 个 workflow YAML 可解析
+```
+
+### 2.6 原生可执行
 
 ```bash
 cargo build --release --example mini_cli
