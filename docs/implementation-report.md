@@ -85,6 +85,13 @@ cargo tree -p did-sdk | grep subxt    # 无输出
 | `node` | [43229893408](https://github.com/metercai/did-sdk/actions/runs/43229893408) | 10/10 success |
 | `cross-lang` | [43229893279](https://github.com/metercai/did-sdk/actions/runs/43229893279) | success |
 
+## 7.1 首个 Release
+
+- tag：`v0.1.0`
+- run：[43245495138](https://github.com/metercai/did-sdk/actions/runs/43245495138)
+- 资产：10 个 wheel、2 个 npm tarball（各含 5 平台 `.node`）、4 个 Rust CLI、`SHA256SUMS`。
+- 已验证：发布 wheel 可 import 并完成 Client/Server 签名；npm tarball 可安装并完成同样流程。
+
 ## 8. 待外部条件
 
 1. **发布**：未发布 crates.io / PyPI / npm；

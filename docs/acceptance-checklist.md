@@ -118,6 +118,17 @@ VC 加密密钥默认复用 KeyVault 密码；无 KeyVault 时回退
 | `node` | [43229893408](https://github.com/metercai/did-sdk/actions/runs/43229893408) | 10/10 success |
 | `cross-lang` | [43229893279](https://github.com/metercai/did-sdk/actions/runs/43229893279) | success |
 
+## 6.1 首个 Release
+
+| 项 | 证据 |
+|---|---|
+| tag | [`v0.1.0`](https://github.com/metercai/did-sdk/releases/tag/v0.1.0) |
+| release workflow | [43245495138](https://github.com/metercai/did-sdk/actions/runs/43245495138) success |
+| Python wheels | 10（Client/Server × 5 平台） |
+| Node tarballs | 2（各含 5 平台 `.node`） |
+| Rust CLI | 4（musl x64/arm64、macOS arm64、Windows x64） |
+| 校验 | `SHA256SUMS` 已附 |
+
 ## 7. 待外部条件
 
 | 项 | 原因 |
