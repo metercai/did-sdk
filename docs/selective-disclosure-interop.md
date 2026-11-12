@@ -1,8 +1,12 @@
 # Selective Disclosure Interoperability Contract
 
 This document fixes the byte-level contract between `did-sdk` / `keyvault-core` and `chain-sdk`
-for VC-native salted-hash selective disclosure. It is not a JWT-based contract. Both sides must use the same primitives; no independent
-implementations are permitted.
+for VC-native salted-hash selective disclosure. Both sides must use the same primitives; no
+independent implementations are permitted.
+
+Related: [DidSdk Interface Contract](DidSdk-Interface-Contract.md) ·
+[KeyVaultCore Interface Contract](KeyVaultCore-Interface-Contract.md) ·
+[ChainSdk Interface Contract](https://github.com/metercai/chain-sdk/blob/main/docs/ChainSdk-Interface-Contract.md).
 
 ---
 

@@ -8,6 +8,13 @@
 | Audience | Client applications, `aimail-sdk`, `chain-sdk`, `chain-owner-sdk`, binding maintainers |
 | Normative | This document is the single source of truth for the DidSdk contract. |
 
+## Related Contracts
+
+| Project | Document |
+|---|---|
+| did-sdk | [KeyVaultCore Interface Contract](KeyVaultCore-Interface-Contract.md) · [Selective Disclosure Interop](selective-disclosure-interop.md) |
+| chain-sdk | [ChainSdk Interface Contract](https://github.com/metercai/chain-sdk/blob/main/docs/ChainSdk-Interface-Contract.md) |
+
 ---
 
 ## 1. Scope
@@ -23,9 +30,8 @@ applications and service-side Rust applications. It is parameterised by two mode
 
 It supports two backends: `Mock` (in-process) and `Centralized` (read-only HTTP DID resolution).
 
-The selective-disclosure mechanism is **VC-native salted-hash selective disclosure**, not a
-JWT-based mechanism. The same salted-hash construction is used inside a W3C VC/VP; no JWT is
-issued or verified.
+The selective-disclosure mechanism is **VC-native salted-hash selective disclosure**. The same
+salted-hash construction is used inside a W3C VC/VP.
 
 ### 1.2 Responsibilities and boundaries
 

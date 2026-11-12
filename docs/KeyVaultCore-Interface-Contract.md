@@ -8,6 +8,13 @@
 | Audience | `did-sdk`, `chain-sdk`, `chain-owner-sdk`, binding maintainers |
 | Normative | This document is the single source of truth for the KeyVault contract. |
 
+## Related Contracts
+
+| Project | Document |
+|---|---|
+| did-sdk | [DidSdk Interface Contract](DidSdk-Interface-Contract.md) · [Selective Disclosure Interop](selective-disclosure-interop.md) |
+| chain-sdk | [ChainSdk Interface Contract](https://github.com/metercai/chain-sdk/blob/main/docs/ChainSdk-Interface-Contract.md) |
+
 ---
 
 ## 1. Scope

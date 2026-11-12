@@ -14,6 +14,7 @@ DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` �
 > - Spec: [DidSdk Interface Contract](docs/DidSdk-Interface-Contract.md)
 > - Spec: [KeyVaultCore Interface Contract](docs/KeyVaultCore-Interface-Contract.md)
 > - Spec: [Selective Disclosure Interop](docs/selective-disclosure-interop.md)
+> - Related: [ChainSdk Interface Contract](https://github.com/metercai/chain-sdk/blob/main/docs/ChainSdk-Interface-Contract.md)
 
 ---
 
@@ -251,7 +252,7 @@ VC 的 `proof` 结构：
 }
 ```
 
-### 5.1 选择性披露（salted-hash，非 JWT）
+### 5.1 选择性披露（salted-hash）
 
 支持在 `credentialSubject` 中生成 `_sd` / `_sd_alg`，把可披露属性移出 VC 原文，
 并与 Disclosures 绑定加密存储：
