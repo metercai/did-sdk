@@ -5,7 +5,7 @@
 | 日期 | 2026-11-12 |
 | 规格 | `01-DidSdk接口契约与实现规格书1.md`、`04-keyvault-core_crate规格书1.md` |
 | 范围 | keyvault-core namespace 隔离、DidSdk<Client/Server>、三种 DID 方法、VC 钱包、绑定与测试 |
-| 结论 | v2 代码与本地测试完成；GitHub Actions 全绿（提交 `57f6dc6`） |
+| 结论 | v2 代码与本地测试完成；GitHub Actions 全绿（提交 `52f8555`） |
 
 ---
 
@@ -55,15 +55,15 @@ DidSdk<Server> ── vault: None ───────────────�
 6. keyvault-core 文件格式 v1 → v2（`.enc`，namespace 子目录），旧 keystore 不兼容；
 7. 字符串签名格式保持向后兼容（原有 3 个签名输入格式不变）。
 
-## 4. GitHub Actions（v2 提交 `57f6dc6`）
+## 4. GitHub Actions（v2 提交 `52f8555`）
 
 | workflow | run | 结果 |
 |---|---|---|
-| `ci` | [43205050645](https://github.com/metercai/did-sdk/actions/runs/43205050645) | success |
-| `rust-musl` | [43205050636](https://github.com/metercai/did-sdk/actions/runs/43205050636) | 4/4 success |
-| `python` | [43205050896](https://github.com/metercai/did-sdk/actions/runs/43205050896) | 5/5 success |
-| `node` | [43205050741](https://github.com/metercai/did-sdk/actions/runs/43205050741) | 5/5 success |
-| `cross-lang` | [43205050782](https://github.com/metercai/did-sdk/actions/runs/43205050782) | success |
+| `ci` | [43206452324](https://github.com/metercai/did-sdk/actions/runs/43206452324) | success |
+| `rust-musl` | [43206452484](https://github.com/metercai/did-sdk/actions/runs/43206452484) | 4/4 success |
+| `python` | [43206452418](https://github.com/metercai/did-sdk/actions/runs/43206452418) | 5/5 success |
+| `node` | [43206452331](https://github.com/metercai/did-sdk/actions/runs/43206452331) | 5/5 success |
+| `cross-lang` | [43206452358](https://github.com/metercai/did-sdk/actions/runs/43206452358) | success |
 
 musl 静态日志：
 

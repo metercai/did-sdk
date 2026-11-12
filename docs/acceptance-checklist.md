@@ -57,9 +57,9 @@
 
 | 编号 | 验收项 | 状态 | 证据 |
 |---|---|---|---|
-| S1 | Linux musl 完全静态 | ✅ | `rust-musl` run [43205050636](https://github.com/metercai/did-sdk/actions/runs/43205050636)；x86_64/aarch64 `statically linked` + `ldd: not a dynamic executable` |
+| S1 | Linux musl 完全静态 | ✅ | `rust-musl` run [43206452484](https://github.com/metercai/did-sdk/actions/runs/43206452484)；x86_64/aarch64 `statically linked` + `ldd: not a dynamic executable` |
 | S2 | `UserRejected` 三语言透传 | ✅ | Rust 测试 + Python/Node 映射代码 |
-| S3 | 四平台构建矩阵 | ✅ | Rust 4/4、Python 5/5、Node 5/5 全绿；CI `43205050645`、Python `43205050896`、Node `43205050741` |
+| S3 | 四平台构建矩阵 | ✅ | Rust 4/4、Python 5/5、Node 5/5 全绿；CI `43206452324`、Python `43206452418`、Node `43206452331` |
 
 ## 4. 绑定
 
@@ -83,15 +83,15 @@
 | Python `pytest` | **9 passed** |
 | Node `vitest` | **8 passed** |
 
-## 6. GitHub Actions（v2 代码提交 `57f6dc6`）
+## 6. GitHub Actions（v2 代码提交 `52f8555`）
 
 | workflow | run | 结果 |
 |---|---|---|
-| `ci` | [43205050645](https://github.com/metercai/did-sdk/actions/runs/43205050645) | success |
-| `rust-musl` | [43205050636](https://github.com/metercai/did-sdk/actions/runs/43205050636) | 4/4 success |
-| `python` | [43205050896](https://github.com/metercai/did-sdk/actions/runs/43205050896) | 5/5 success |
-| `node` | [43205050741](https://github.com/metercai/did-sdk/actions/runs/43205050741) | 5/5 success |
-| `cross-lang` | [43205050782](https://github.com/metercai/did-sdk/actions/runs/43205050782) | success |
+| `ci` | [43206452324](https://github.com/metercai/did-sdk/actions/runs/43206452324) | success |
+| `rust-musl` | [43206452484](https://github.com/metercai/did-sdk/actions/runs/43206452484) | 4/4 success |
+| `python` | [43206452418](https://github.com/metercai/did-sdk/actions/runs/43206452418) | 5/5 success |
+| `node` | [43206452331](https://github.com/metercai/did-sdk/actions/runs/43206452331) | 5/5 success |
+| `cross-lang` | [43206452358](https://github.com/metercai/did-sdk/actions/runs/43206452358) | success |
 
 ## 7. 待外部条件
 
