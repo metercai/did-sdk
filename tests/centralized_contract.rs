@@ -165,3 +165,50 @@ async fn local_writes_never_use_remote() {
     let requests = server.received_requests().await.unwrap();
     assert!(requests.is_empty(), "local operations must not hit HTTP");
 }
+
+#[tokio::test]
+async fn server_error_maps_to_chain_unavailable() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/anchors/err"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+    let sdk = CentralizedDidSdk::new(
+        Arc::new(MemoryKeystore::new()),
+        config(dir.path(), server.uri()),
+    )
+    .unwrap();
+    assert!(matches!(
+        sdk.get_anchor("err").await.unwrap_err(),
+        DidSdkError::ChainUnavailable(_)
+    ));
+}
+
+#[tokio::test]
+async fn zero_ttl_disables_cache() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = MockServer::start().await;
+    let anchor = json!({
+        "anchor_id": "a1",
+        "did": "did:key:z6MkTest",
+        "status": "active",
+        "created_at": 1,
+        "updated_at": 2,
+        "expires_at": null,
+        "payload": null
+    });
+    Mock::given(method("GET"))
+        .and(path("/anchors/a1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(anchor))
+        .mount(&server)
+        .await;
+
+    let mut cfg = config(dir.path(), server.uri());
+    cfg.cache_ttl_secs = 0;
+    let sdk = CentralizedDidSdk::new(Arc::new(MemoryKeystore::new()), cfg).unwrap();
+    sdk.get_anchor("a1").await.unwrap();
+    sdk.get_anchor("a1").await.unwrap();
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
+}

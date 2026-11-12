@@ -272,3 +272,90 @@ fn defaults_are_stable() {
     assert_eq!(config.mode, DidSdkMode::Mock);
     assert_eq!(config.key_vault.scheme, "file-keystore");
 }
+
+#[test]
+#[serial]
+fn invalid_toml_is_config_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let config_path = dir.path().join("bad.toml");
+    std::fs::write(&config_path, "mode = [").unwrap();
+    temp_env::with_vars(
+        env(
+            dir.path(),
+            &[("DID_SDK_CONFIG_FILE", Some(config_path.to_str().unwrap()))],
+        ),
+        || {
+            assert!(matches!(
+                resolve_config(ConfigOverrides::default()),
+                Err(DidSdkError::ConfigError(_))
+            ));
+        },
+    );
+}
+
+#[test]
+#[serial]
+fn missing_config_file_falls_back_to_defaults() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("does-not-exist.toml");
+    temp_env::with_vars(
+        env(
+            dir.path(),
+            &[("DID_SDK_CONFIG_FILE", Some(missing.to_str().unwrap()))],
+        ),
+        || {
+            let config = resolve_config(ConfigOverrides::default()).unwrap();
+            assert_eq!(config.mode, DidSdkMode::Mock);
+        },
+    );
+}
+
+#[test]
+#[serial]
+fn empty_password_file_is_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    let password_file = dir.path().join("empty.password");
+    std::fs::write(&password_file, "\n").unwrap();
+    temp_env::with_vars(
+        env(
+            dir.path(),
+            &[(
+                "DID_SDK_KEYVAULT_PASSWORD_FILE",
+                Some(password_file.to_str().unwrap()),
+            )],
+        ),
+        || {
+            assert!(matches!(
+                resolve_config(ConfigOverrides::default()),
+                Err(DidSdkError::ConfigError(_))
+            ));
+        },
+    );
+}
+
+#[test]
+#[serial]
+fn empty_env_password_falls_back_to_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let password_file = dir.path().join("password.txt");
+    std::fs::write(&password_file, "file-pass\n").unwrap();
+    temp_env::with_vars(
+        env(
+            dir.path(),
+            &[
+                ("DID_SDK_KEYVAULT_PASSWORD", Some("")),
+                (
+                    "DID_SDK_KEYVAULT_PASSWORD_FILE",
+                    Some(password_file.to_str().unwrap()),
+                ),
+            ],
+        ),
+        || {
+            let config = resolve_config(ConfigOverrides::default()).unwrap();
+            assert_eq!(
+                config.resolved_password.as_ref().unwrap().expose_secret(),
+                "file-pass"
+            );
+        },
+    );
+}

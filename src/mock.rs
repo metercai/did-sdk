@@ -81,6 +81,19 @@ impl MockDidSdk {
     }
 }
 
+impl MockDidSdk {
+    async fn check_confirm_policy(&self) -> Result<(), DidSdkError> {
+        match self.confirm {
+            ConfirmPolicy::AutoReject => Err(DidSdkError::UserRejected),
+            ConfirmPolicy::Delay(milliseconds) => {
+                tokio::time::sleep(Duration::from_millis(milliseconds)).await;
+                Ok(())
+            }
+            ConfirmPolicy::AutoConfirm => Ok(()),
+        }
+    }
+}
+
 #[async_trait]
 impl DidSdk for MockDidSdk {
     async fn generate_did_key(&self) -> Result<String, DidSdkError> {
@@ -93,13 +106,7 @@ impl DidSdk for MockDidSdk {
         ctx: SigningContext,
     ) -> Result<Signature, DidSdkError> {
         tracing::debug!(purpose = %ctx.purpose, "mock signing request");
-        match self.confirm {
-            ConfirmPolicy::AutoReject => return Err(DidSdkError::UserRejected),
-            ConfirmPolicy::Delay(milliseconds) => {
-                tokio::time::sleep(Duration::from_millis(milliseconds)).await;
-            }
-            ConfirmPolicy::AutoConfirm => {}
-        }
+        self.check_confirm_policy().await?;
         self.core.sign_with_active(message).await
     }
 
@@ -126,6 +133,7 @@ impl DidSdk for MockDidSdk {
         &self,
         claims: serde_json::Value,
     ) -> Result<VerifiableCredential, DidSdkError> {
+        self.check_confirm_policy().await?;
         vc::issue_self_asserted_vc(&self.core, claims).await
     }
 
@@ -151,6 +159,7 @@ impl DidSdk for MockDidSdk {
         challenge: &str,
         domain: &str,
     ) -> Result<VerifiablePresentation, DidSdkError> {
+        self.check_confirm_policy().await?;
         vc::build_vp(&self.core, vcs, challenge, domain).await
     }
 
@@ -161,6 +170,7 @@ impl DidSdk for MockDidSdk {
         body_hash: &str,
         rcpt_hash: &str,
     ) -> Result<String, DidSdkError> {
+        self.check_confirm_policy().await?;
         did_signature::build_header(&self.core, from, anchor_id, body_hash, rcpt_hash).await
     }
 
@@ -181,6 +191,7 @@ impl DidSdk for MockDidSdk {
         vc_hash: &str,
         timestamp: u64,
     ) -> Result<IssueAuthorizationSignature, DidSdkError> {
+        self.check_confirm_policy().await?;
         vc::sign_issue_authorization(&self.core, subject_did, vc_type, vc_hash, timestamp).await
     }
 

@@ -3,7 +3,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 #![allow(dead_code)]
 
-use did_sdk::{DidSdk, SigningContext};
+use did_sdk::{DidSdk, DidSdkError, SigningContext};
 use serde_json::json;
 
 /// 对任意 `DidSdk` 实现跑同一组本地语义断言。
@@ -51,6 +51,15 @@ pub async fn assert_roundtrip(sdk: &dyn DidSdk) {
     assert!(verified.valid, "reason: {:?}", verified.reason);
     assert_eq!(verified.did.as_deref(), Some(created.did.as_str()));
 
+    let wrong_from = sdk
+        .verify_did_signature_header(&header, "bob@example.com", "blake2b:1111", "blake2b:2222")
+        .expect("verify wrong from");
+    assert!(!wrong_from.valid);
+    let malformed = sdk
+        .verify_did_signature_header("not-a-header", "alice@example.com", "b", "r")
+        .expect("verify malformed");
+    assert!(!malformed.valid);
+
     let vc = sdk
         .issue_self_asserted_vc(json!({"name": "Alice", "type": "TestCredential"}))
         .await
@@ -83,4 +92,8 @@ pub async fn assert_roundtrip(sdk: &dyn DidSdk) {
 
     sdk.remove_vc(&anchor_id).await.expect("remove vc");
     assert!(sdk.get_vc(&anchor_id).await.expect("get removed").is_none());
+    assert!(matches!(
+        sdk.remove_vc(&anchor_id).await,
+        Err(DidSdkError::VcNotFound(_))
+    ));
 }

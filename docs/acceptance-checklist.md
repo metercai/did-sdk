@@ -23,7 +23,7 @@
 | 编号 | 验收项 | 状态 | 验证命令 | 证据摘要 |
 |---|---|---|---|---|
 | K1 | KeyVault trait 完整（含 `UserRejected`） | ✅ | `cargo check -p keyvault-core` | 通过 |
-| K2 | FileKeystore 生成 / 加密落盘 | ✅ | `cargo test -p keyvault-core` | 10 个集成测试 + 4 个单测全绿 |
+| K2 | FileKeystore 生成 / 加密落盘 | ✅ | `cargo test -p keyvault-core` | 12 个集成测试 + 4 个单测全绿 |
 | K3 | 错误密码被拒绝 | ✅ | `cargo test -p keyvault-core --test keystore` | `Err(InvalidPassword)` |
 | K4 | 签名可验证（Ed25519 / Sr25519） | ✅ | 同上 | Ed25519 往返 + sr25519 verify 测试 |
 | K5 | 私钥不出 KeyVault | ✅ | 代码审查 | `Keypair` 无 `Serialize`/`Clone`/`Debug`；trait 无导出方法 |
@@ -35,11 +35,11 @@
 | 编号 | 验收项 | 状态 | 验证命令 | 证据摘要 |
 |---|---|---|---|---|
 | D1 | `DidSdk` 接口契约完整 | ✅ | `cargo check -p did-sdk` | 全方法实现 |
-| D2 | 三模式配置切换（默认/环境/覆盖/TOML） | ✅ | `cargo test --test config_resolution` | 9 passed（默认/env/覆盖/部分 TOML/密码优先级/禁用自动生成） |
-| D3 | 三模式语义一致 | ✅ | `cargo test --test consistency` | 4 passed + 1 ignored（Mock/Centralized/Chain 本地流程） |
-| D4 | Mock 自动确认 / 自动拒绝 | ✅ | `cargo test --test user_rejected` | 4 passed（AutoReject、vault UserRejected、handler、delay） |
+| D2 | 三模式配置切换（默认/环境/覆盖/TOML） | ✅ | `cargo test --test config_resolution` | 13 passed（默认/env/覆盖/部分 TOML/密码优先级/错误 TOML/空密码/禁用自动生成） |
+| D3 | 三模式语义一致 | ✅ | `cargo test --test consistency` | 4 passed + 1 ignored（Mock/Centralized/Chain 本地流程；header 篡改/删除不存在 VC 等） |
+| D4 | Mock 自动确认 / 自动拒绝 | ✅ | `cargo test --test user_rejected` | 6 passed（AutoReject 全签名路径、vault UserRejected、handler、delay） |
 | D5 | Mock 签名延迟 | ✅ | 同上 | `with_signing_delay(1)` 签名成功 |
-| D6 | Centralized 只读（仅 GET） | ✅ | `cargo test --test centralized_contract` | 5 passed；`received_requests` 全部 GET；缓存命中 |
+| D6 | Centralized 只读（仅 GET） | ✅ | `cargo test --test centralized_contract` | 7 passed；`received_requests` 全部 GET；缓存命中/TTL=0/500 错误 |
 | D7 | Chain 只读 storage，不注入 signer | ⚠️ | 代码审查 + `#[ignore]` 测试 | 动态 storage 查询/缓存/无 signer 已实现；真实链未验证 |
 | D8 | did:key 私钥安全 | ✅ | 代码审查 | 私钥仅存在于 KeyVault；绑定层不暴露 |
 | D9 | 零链账户私钥 | ✅ | 代码审查 | `chain.rs` 只构造 `OnlineClient`，无 signer |

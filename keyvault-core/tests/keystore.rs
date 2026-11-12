@@ -208,3 +208,39 @@ fn sr25519_verify_matches_schnorrkel() {
         &signature.to_bytes()
     ));
 }
+
+#[tokio::test]
+async fn corrupt_index_is_rejected() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("keys");
+    let vault =
+        FileKeystore::new(path.clone(), SecretString::from("password".to_string())).expect("new");
+    vault.generate().await.expect("generate");
+    std::fs::write(path.join("index.json"), b"{ not json").expect("write corrupt index");
+    assert!(matches!(
+        vault.list_keys().await,
+        Err(KeyVaultError::InvalidKeyFormat(_))
+    ));
+}
+
+#[tokio::test]
+async fn tampered_key_file_fails_to_unlock() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("keys");
+    let password = SecretString::from("password".to_string());
+    let vault = FileKeystore::new(path.clone(), password.clone()).expect("new");
+    let key_id = vault.generate().await.expect("generate");
+
+    let index: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(path.join("index.json")).expect("read index"))
+            .expect("parse index");
+    let file = index["keys"][0]["file"].as_str().expect("file name");
+    let key_path = path.join("keys").join(file);
+    let mut bytes = std::fs::read(&key_path).expect("read key");
+    let last = bytes.len() - 1;
+    bytes[last] ^= 0xFF;
+    std::fs::write(&key_path, bytes).expect("write tampered key");
+
+    let reopened = FileKeystore::new(path, password).expect("reopen");
+    assert!(reopened.load(&key_id).await.is_err());
+}

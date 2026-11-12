@@ -154,3 +154,71 @@ async fn signing_delay_still_confirms() {
         .unwrap();
     assert_eq!(signature.0.len(), 64);
 }
+
+#[tokio::test]
+async fn handler_rejection_propagates_for_vp_and_authorization() {
+    let dir = tempfile::tempdir().unwrap();
+    let sdk = MockDidSdk::new(Arc::new(MemoryKeystore::new()), config(dir.path())).unwrap();
+    sdk.set_request_handler(Arc::new(RejectingHandler));
+
+    let did = sdk.generate_did_key().await.unwrap();
+    let vc = sdk
+        .issue_self_asserted_vc(serde_json::json!({"name": "Alice"}))
+        .await
+        .unwrap();
+    let error = sdk
+        .build_vp(vec![vc], "challenge", "example.com")
+        .await
+        .unwrap_err();
+    assert!(matches!(error, DidSdkError::UserRejected));
+
+    let error = sdk
+        .sign_issue_authorization(&did, "TestCredential", "hash", 1)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, DidSdkError::UserRejected));
+}
+
+#[tokio::test]
+async fn mock_auto_reject_blocks_all_signing_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    let sdk = MockDidSdk::new(Arc::new(MemoryKeystore::new()), config(dir.path()))
+        .unwrap()
+        .with_auto_reject();
+    let did = sdk.generate_did_key().await.unwrap();
+
+    assert!(matches!(
+        sdk.issue_self_asserted_vc(serde_json::json!({"name": "Alice"}))
+            .await
+            .unwrap_err(),
+        DidSdkError::UserRejected
+    ));
+    assert!(matches!(
+        sdk.build_did_signature_header("alice@example.com", "a", "b", "c")
+            .await
+            .unwrap_err(),
+        DidSdkError::UserRejected
+    ));
+    assert!(matches!(
+        sdk.sign_issue_authorization(&did, "T", "h", 1)
+            .await
+            .unwrap_err(),
+        DidSdkError::UserRejected
+    ));
+
+    let vc = did_sdk::VerifiableCredential {
+        context: vec![],
+        id: "urn:test".into(),
+        types: vec!["VerifiableCredential".into()],
+        issuer: did,
+        issuance_date: String::new(),
+        expiration_date: None,
+        credential_subject: serde_json::json!({}),
+        proof: None,
+        anchor_id: Some("a".into()),
+    };
+    assert!(matches!(
+        sdk.build_vp(vec![vc], "c", "d").await.unwrap_err(),
+        DidSdkError::UserRejected
+    ));
+}

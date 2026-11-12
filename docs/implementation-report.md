@@ -31,8 +31,8 @@
 cargo fmt --all -- --check                    # 通过
 cargo clippy --workspace --all-targets -D warnings  # 通过
 cargo test --workspace --exclude did-sdk-python --exclude did-sdk-node
-  keyvault-core: 4 unit + 10 integration = 14 passed
-  did-sdk:       3 unit + 26 integration = 29 passed, 1 ignored
+  keyvault-core: 4 unit + 12 integration = 16 passed
+  did-sdk:       3 unit + 34 integration = 37 passed, 1 ignored
 ```
 
 覆盖：
