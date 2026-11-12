@@ -1,6 +1,6 @@
 # GitHub Actions 接入说明
 
-> **状态：已接入（2026-11-12）。** 最新一次代码提交（R1 后）的 workflow 结果见 GitHub Actions；Python/Node 各 10 个双产物 job。
+> **状态：已接入（2026-11-12）。** 最新一次代码提交（R1，`adf83ee`）的 5 个 workflow 全绿；Python/Node 各 10 个双产物 job。
 > 运行记录见 [`docs/acceptance-checklist.md`](acceptance-checklist.md) 与 GitHub Actions。
 
 本文档说明如何把本地 `did-sdk` 仓库接入 `metercai/did-sdk`，以及如何验证

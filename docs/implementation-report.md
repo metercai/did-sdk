@@ -77,7 +77,13 @@ cargo tree -p did-sdk | grep subxt    # 无输出
 
 ## 7. GitHub Actions
 
-待本轮推送后重跑；预期 Rust 4/4、Python 10/10、Node 10/10、cross-lang 成功。
+| workflow | run | 结果 |
+|---|---|---|
+| `ci` | [43229893389](https://github.com/metercai/did-sdk/actions/runs/43229893389) | success |
+| `rust-musl` | [43229893304](https://github.com/metercai/did-sdk/actions/runs/43229893304) | 4/4 success |
+| `python` | [43229893563](https://github.com/metercai/did-sdk/actions/runs/43229893563) | 10/10 success |
+| `node` | [43229893408](https://github.com/metercai/did-sdk/actions/runs/43229893408) | 10/10 success |
+| `cross-lang` | [43229893279](https://github.com/metercai/did-sdk/actions/runs/43229893279) | success |
 
 ## 8. 待外部条件
 

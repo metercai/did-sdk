@@ -60,9 +60,9 @@
 
 | 编号 | 验收项 | 状态 | 证据 |
 |---|---|---|---|
-| S1 | Linux musl 完全静态 | ⏳ | 待 R1 推送后重跑 `rust-musl` |
+| S1 | Linux musl 完全静态 | ✅ | `rust-musl` [43229893304](https://github.com/metercai/did-sdk/actions/runs/43229893304)；x86_64/aarch64 `statically linked` + `ldd: not a dynamic executable` |
 | S2 | `UserRejected` 三语言透传 | ✅ | Rust 测试 + Python/Node 映射代码 |
-| S3 | 双产物构建矩阵 | ⏳ | 待 R1 推送后重跑（预期 Rust 4/4、Python 10/10、Node 10/10） |
+| S3 | 双产物构建矩阵 | ✅ | Rust 4/4、Python 10/10（client+server）、Node 10/10（client+server） |
 
 ## 4. 绑定
 
@@ -102,21 +102,21 @@
 | Rust crate | `did-sdk-client` | `did-sdk-server` | ✅ |
 | Python wheel | `did-sdk-client` (`did_sdk`) | `did-sdk-server` (`did_sdk_server`) | ✅ 本地构建/测试 |
 | Node addon | `@did-sdk/client` | `@did-sdk/server` | ✅ 本地构建/测试 |
-| CI 矩阵 | 5 平台 | 5 平台 | ⏳ 待 R1 推送后重跑 |
+| CI 矩阵 | 5 平台 | 5 平台 | ✅ 10/10 全绿 |
 
 Server 默认 `key_vault: Some(FileKeystore)`；`key_vault_scheme="none"` 可关闭本地签名器。
 VC 加密密钥默认复用 KeyVault 密码；无 KeyVault 时回退
 `DID_SDK_VC_STORAGE_PASSWORD` / 自动 `.vc_password`。
 
-## 6. GitHub Actions（R1 后待重跑）
+## 6. GitHub Actions（R1 代码提交 `adf83ee`）
 
-| workflow | 结果 |
-|---|---|
-| `ci` | ⏳ 待重跑 |
-| `rust-musl` | ⏳ 待重跑 |
-| `python` | ⏳ 待重跑 |
-| `node` | ⏳ 待重跑 |
-| `cross-lang` | ⏳ 待重跑 |
+| workflow | run | 结果 |
+|---|---|---|
+| `ci` | [43229893389](https://github.com/metercai/did-sdk/actions/runs/43229893389) | success |
+| `rust-musl` | [43229893304](https://github.com/metercai/did-sdk/actions/runs/43229893304) | 4/4 success |
+| `python` | [43229893563](https://github.com/metercai/did-sdk/actions/runs/43229893563) | 10/10 success |
+| `node` | [43229893408](https://github.com/metercai/did-sdk/actions/runs/43229893408) | 10/10 success |
+| `cross-lang` | [43229893279](https://github.com/metercai/did-sdk/actions/runs/43229893279) | success |
 
 ## 7. 待外部条件
 
