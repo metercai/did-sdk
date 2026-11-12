@@ -193,3 +193,39 @@ async fn did_peer_one_signature_header_verifies_offline() {
         .unwrap();
     assert!(result.verified, "reason: {:?}", result.reason);
 }
+
+#[tokio::test]
+async fn server_dev_file_signer_can_sign() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = server_config(dir.path(), "did:web:issuer.example.com");
+    config.key_vault = Some(did_sdk::KeyVaultConfig {
+        scheme: "memory-keystore".into(),
+        path: dir.path().join("server-keys"),
+        password_env: "DID_SDK_KEYVAULT_PASSWORD".into(),
+        password_file: dir.path().join("server.password"),
+        allow_auto_generate_password: true,
+        password_prompt: false,
+    });
+    config.resolved_password = Some(SecretString::from("test".to_string()));
+    let server = build_server_sdk(&config).unwrap();
+    assert!(server.has_signer());
+
+    let signature = server
+        .sign_with_participant_key(
+            b"server payload",
+            did_sdk::SigningContext {
+                purpose: "dev".into(),
+                payload_summary: "test".into(),
+                requestor: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(signature.0.len(), 64);
+
+    let vc = server
+        .issue_self_asserted_vc(serde_json::json!({"name": "Alice"}))
+        .unwrap();
+    assert_eq!(vc.issuer, "did:web:issuer.example.com");
+    assert!(vc.proof.is_some());
+}

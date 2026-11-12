@@ -19,12 +19,12 @@ pub(crate) struct SdkCore {
 }
 
 impl SdkCore {
-    pub(crate) fn new(vc_storage_path: std::path::PathBuf) -> Self {
-        Self {
-            vcs: VcStore::new(vc_storage_path),
+    pub(crate) fn new(vc_storage_path: std::path::PathBuf) -> Result<Self, DidSdkError> {
+        Ok(Self {
+            vcs: VcStore::new(vc_storage_path)?,
             handler: StdRwLock::new(None),
             active_key: RwLock::new(None),
-        }
+        })
     }
 
     pub(crate) fn set_handler(&self, handler: Arc<dyn ServerRequestHandler>) {

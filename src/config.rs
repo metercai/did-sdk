@@ -99,6 +99,11 @@ pub struct ServerConfig {
     pub participant_did: String,
     /// VC 存储目录。
     pub vc_storage_path: PathBuf,
+    /// 可选本地签名器（开发/测试/试运行）；生产环境留空。
+    pub key_vault: Option<KeyVaultConfig>,
+    /// 已解析密码（仅 key_vault 为 Some 时）。
+    #[serde(skip)]
+    pub resolved_password: Option<SecretString>,
     /// Centralized 端点。
     pub centralized_endpoint: String,
     /// Chain 端点。
@@ -114,6 +119,8 @@ impl Default for ServerConfig {
             mode: DidSdkMode::Chain,
             participant_did: String::new(),
             vc_storage_path: home.join("participant-vc-store"),
+            key_vault: None,
+            resolved_password: None,
             centralized_endpoint: "http://127.0.0.1:8080".into(),
             chain_endpoint: "ws://127.0.0.1:9944".into(),
             cache_ttl_secs: 600,
@@ -365,23 +372,23 @@ fn apply_overrides(config: &mut ClientConfig, overrides: ConfigOverrides) {
     }
 }
 
-fn resolve_password(config: &ClientConfig) -> Result<SecretString, DidSdkError> {
+fn resolve_keyvault_password(config: &KeyVaultConfig) -> Result<SecretString, DidSdkError> {
     use keyvault_core::{PasswordSource, resolve_password as kv_resolve};
 
-    if config.key_vault.password_prompt {
+    if config.password_prompt {
         return kv_resolve(&PasswordSource::Prompt)
             .map_err(|error| DidSdkError::ConfigError(error.to_string()));
     }
-    if let Ok(password) = std::env::var(&config.key_vault.password_env) {
+    if let Ok(password) = std::env::var(&config.password_env) {
         if !password.is_empty() {
             return Ok(SecretString::from(password));
         }
     }
-    let source = if config.key_vault.password_file.exists() {
-        PasswordSource::File(config.key_vault.password_file.clone())
-    } else if config.key_vault.allow_auto_generate_password {
+    let source = if config.password_file.exists() {
+        PasswordSource::File(config.password_file.clone())
+    } else if config.allow_auto_generate_password {
         PasswordSource::AutoGenerate {
-            target_file: config.key_vault.password_file.clone(),
+            target_file: config.password_file.clone(),
         }
     } else {
         return Err(DidSdkError::ConfigError(
@@ -391,14 +398,26 @@ fn resolve_password(config: &ClientConfig) -> Result<SecretString, DidSdkError> 
     kv_resolve(&source).map_err(|error| DidSdkError::ConfigError(error.to_string()))
 }
 
+fn resolve_password(config: &ClientConfig) -> Result<SecretString, DidSdkError> {
+    resolve_keyvault_password(&config.key_vault)
+}
+
 fn build_vault(config: &ClientConfig) -> Result<Arc<dyn keyvault_core::KeyVault>, DidSdkError> {
-    match config.key_vault.scheme.as_str() {
+    let password = config
+        .resolved_password
+        .clone()
+        .ok_or_else(|| DidSdkError::ConfigError("keystore password was not resolved".into()))?;
+    build_vault_with(&config.key_vault, &password)
+}
+
+fn build_vault_with(
+    config: &KeyVaultConfig,
+    password: &SecretString,
+) -> Result<Arc<dyn keyvault_core::KeyVault>, DidSdkError> {
+    match config.scheme.as_str() {
         "file-keystore" => {
-            let password = config.resolved_password.clone().ok_or_else(|| {
-                DidSdkError::ConfigError("keystore password was not resolved".into())
-            })?;
             let password = SecretString::from(password.expose_secret().to_owned());
-            let vault = keyvault_core::FileKeystore::new(config.key_vault.path.clone(), password)
+            let vault = keyvault_core::FileKeystore::new(config.path.clone(), password)
                 .map_err(|error| DidSdkError::ConfigError(error.to_string()))?;
             Ok(Arc::new(vault))
         }
@@ -453,7 +472,7 @@ pub fn build_client_sdk_with_backend(
         Some(vault),
         None,
         config.vc_storage_path.clone(),
-    )))
+    )?))
 }
 
 /// 构建 Server SDK。
@@ -484,12 +503,22 @@ pub fn build_server_sdk_with_backend(
             "server participant_did is required".into(),
         ));
     }
+    let vault = match &config.key_vault {
+        Some(key_vault) => {
+            let password = match &config.resolved_password {
+                Some(password) => password.clone(),
+                None => resolve_keyvault_password(key_vault)?,
+            };
+            Some(build_vault_with(key_vault, &password)?)
+        }
+        None => None,
+    };
     Ok(Arc::new(crate::DidSdk::<Server>::new(
         backend,
-        None,
+        vault,
         Some(config.participant_did.clone()),
         config.vc_storage_path.clone(),
-    )))
+    )?))
 }
 
 /// 兼容旧调用：构建 Client。

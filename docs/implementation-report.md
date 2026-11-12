@@ -55,6 +55,14 @@ DidSdk<Server> ── vault: None ───────────────�
 6. keyvault-core 文件格式 v1 → v2（`.enc`，namespace 子目录），旧 keystore 不兼容；
 7. 字符串签名格式保持向后兼容（原有 3 个签名输入格式不变）。
 
+## 3.1 本轮新增能力
+
+- `ServerConfig.key_vault: Option<KeyVaultConfig>`：Server 在开发/测试/试运行可配置
+  `FileKeystore`，使用 `participant-did/` 密钥签发 VC / 签名；生产留空。
+- `VcStore` 加密：每个 VC 文件以 `DVCS` 头 + ChaCha20-Poly1305 落盘；
+  密钥来自 `DID_SDK_VC_STORAGE_PASSWORD` 或自动生成的 `.vc_password`（0600），
+  Client 与 Server 均不写明文。
+
 ## 4. GitHub Actions（v2 提交 `52f8555`）
 
 | workflow | run | 结果 |
@@ -76,7 +84,7 @@ aarch64: statically linked, stripped / OK: static / ldd: not a dynamic executabl
 
 ```text
 cargo test -p keyvault-core           # 9 unit + 16 integration = 25 passed
-cargo test -p did-sdk                 # 3 unit + 45 integration = 48 passed, 1 ignored
+cargo test -p did-sdk                 # 3 unit + 48 integration = 51 passed, 1 ignored
 cargo fmt --all -- --check            # passed
 cargo clippy --workspace --all-targets -- -D warnings  # passed
 pytest bindings/python/tests          # 9 passed

@@ -22,7 +22,7 @@ DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` �
 | 模式 | 使用者 | DID 方法 | 私钥 | VC 能力 |
 |---|---|---|---|---|
 | `DidSdk<Client>` | 客户端应用、`aimail-sdk` | `did:key` / `did:peer` | `KeyVault`（设备安全区） | 签发 + 持有 + 呈现 |
-| `DidSdk<Server>` | `chain-sdk` / `chain-owner-sdk` 服务端 | 固定 `did:web` | **不持有**（外部 `Signer` 注入 `Proof`） | 持有侧、组装、校验他人 VC |
+| `DidSdk<Server>` | `chain-sdk` / `chain-owner-sdk` 服务端 | 固定 `did:web` | 生产不持有；开发/测试/试运行可选 `FileKeystore` | 持有侧、组装、校验他人 VC；本地签名器可签发 |
 
 两种模式通过类型参数在**编译期隔离**：
 
@@ -167,8 +167,8 @@ console.log(did, peer, sig.length, vc.proof.jws);
 | 能力 | Client | Server |
 |---|---|---|
 | `store_vc` / `get_vc` / `list_vcs` / `remove_vc` | 是 | 是 |
-| `build_vp` | 是（本地签名） | 是（无签名私钥，返回无 proof 的 VP） |
-| `issue_self_asserted_vc` | 是 | 否 |
+| `build_vp` | 是（本地签名） | 有本地签名器时签名；否则返回无 proof 的 VP |
+| `issue_self_asserted_vc` | 是 | 配置本地签名器时可用 |
 | `assemble_vc_with_proof` | — | 是（外部 `Proof` 注入） |
 | `verify_vc` | — | 是（issuer 解析 + 签名 + 有效期 + 锚定） |
 
@@ -214,6 +214,11 @@ endpoint = "ws://127.0.0.1:9944"
 # subject_kind = "server"
 # participant_did = "did:web:issuer.example.com:mail"
 # vc_storage_path = "./participant-vc-store"
+#
+# # 开发/测试/试运行可选；生产环境删除
+# [did_sdk.key_vault]
+# scheme = "file-keystore"
+# path = "./participant-keys"
 ```
 
 ### 环境变量
@@ -231,6 +236,7 @@ endpoint = "ws://127.0.0.1:9944"
 | `DID_SDK_CENTRALIZED_ENDPOINT` | Centralized 端点 |
 | `DID_SDK_CHAIN_ENDPOINT` | Chain 端点 |
 | `DID_SDK_CACHE_TTL_SECS` | TTL |
+| `DID_SDK_VC_STORAGE_PASSWORD` | VC 存储加密密码（缺失时自动生成 `.vc_password`，0600） |
 
 ---
 
@@ -251,8 +257,10 @@ endpoint = "ws://127.0.0.1:9944"
 - `KeyVault` 无导出私钥接口；`Keypair` 不实现 `Serialize` / `Clone` / `Debug`。
 - 三类 namespace 物理隔离：`chain-account/`（sr25519）、`participant-did/`（ed25519）、`client-did/`（ed25519）；跨 namespace 签名返回 `NamespaceViolation`。
 - `FileKeystore`：Argon2id + ChaCha20-Poly1305，按 namespace 子目录 + `index.json`，原子写。
-- Client 签名前用户确认；Server 不持签名私钥。
+- Client 签名前用户确认；Server 生产环境不持签名私钥，开发/测试/试运行可配置本地 `FileKeystore`。
 - 链访问只读；不注入链账户私钥。
+- VC 文件静态加密：`DVCS` 密文 + ChaCha20-Poly1305，密钥由 `DID_SDK_VC_STORAGE_PASSWORD`
+  或自动生成的 `.vc_password`（0600）派生；Client/Server 均不落明文。
 - HTTP 仅 rustls，不引入 OpenSSL/native-tls。
 
 | 目标 | Rust 核心 | Python wheel | Node addon |

@@ -77,11 +77,20 @@
 | 套件 | 结果 |
 |---|---|
 | `cargo test -p keyvault-core` | **9 单测 + 16 集成 = 25 passed** |
-| `cargo test -p did-sdk` | **3 单测 + 45 集成 = 48 passed，1 ignored** |
+| `cargo test -p did-sdk` | **3 单测 + 48 集成 = 51 passed，1 ignored** |
 | `cargo fmt --all -- --check` | 通过 |
 | `cargo clippy --workspace --all-targets -- -D warnings` | 通过 |
 | Python `pytest` | **9 passed** |
 | Node `vitest` | **8 passed** |
+
+## 5.1 本轮新增要求
+
+| 要求 | 状态 | 证据 |
+|---|---|---|
+| Server 可选 FileKeystore 本地签名（开发/测试/试运行） | ✅ | `ServerConfig.key_vault` + `server_dev_file_signer_can_sign` |
+| Client VC 存储密文 | ✅ | `client_vc_is_stored_as_ciphertext_and_reloads`（`DVCS` 头，无明文） |
+| Server VC 存储密文 | ✅ | `server_vc_is_stored_as_ciphertext` |
+| VC 加密密钥来源 | ✅ | `DID_SDK_VC_STORAGE_PASSWORD` 或自动生成 `.vc_password`（0600） |
 
 ## 6. GitHub Actions（v2 代码提交 `52f8555`）
 

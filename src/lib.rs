@@ -82,9 +82,9 @@ impl<M: SdkMode> DidSdk<M> {
         vault: Option<Arc<dyn KeyVault>>,
         participant_did: Option<String>,
         vc_storage_path: std::path::PathBuf,
-    ) -> Self {
-        Self {
-            core: SdkCore::new(vc_storage_path),
+    ) -> Result<Self, DidSdkError> {
+        Ok(Self {
+            core: SdkCore::new(vc_storage_path)?,
             backend,
             vault,
             participant_did,
@@ -93,7 +93,7 @@ impl<M: SdkMode> DidSdk<M> {
             local_dids: StdRwLock::new(HashMap::new()),
             active_did: StdRwLock::new(None),
             _mode: PhantomData,
-        }
+        })
     }
 
     /// 解析 DID；本地 did:key / did:peer 直接构造记录，其他走 backend。
@@ -162,13 +162,13 @@ impl<M: SdkMode> DidSdk<M> {
         let signing_input = vc::vp_signing_input(&holder, challenge, domain, &vcs)?;
         let proof = if let Some(vault) = &self.vault {
             let key_id = self.active_key().await?;
+            let namespace = if M::IS_CLIENT {
+                KeyNamespace::ClientDid
+            } else {
+                KeyNamespace::ParticipantDid
+            };
             let signature = vault
-                .sign_checked(
-                    &key_id,
-                    &signing_input,
-                    KeyNamespace::ClientDid,
-                    KeyAlgorithm::Ed25519,
-                )
+                .sign_checked(&key_id, &signing_input, namespace, KeyAlgorithm::Ed25519)
                 .await
                 .map_err(map_vault_err)?;
             Some(vc::proof_for(&holder, vc::now_ts(), &signature.0))
@@ -208,15 +208,20 @@ impl<M: SdkMode> DidSdk<M> {
             .vault
             .as_ref()
             .ok_or_else(|| DidSdkError::Unsupported("no KeyVault".into()))?;
+        let namespace = if M::IS_CLIENT {
+            KeyNamespace::ClientDid
+        } else {
+            KeyNamespace::ParticipantDid
+        };
         let mut keys = vault
-            .list_keys(Some(KeyNamespace::ClientDid))
+            .list_keys(Some(namespace))
             .await
             .map_err(map_vault_err)?;
         keys.sort_by(|a, b| a.0.cmp(&b.0));
         let key_id = match keys.into_iter().next() {
             Some(key_id) => key_id,
             None => vault
-                .generate(KeyNamespace::ClientDid, KeyAlgorithm::Ed25519)
+                .generate(namespace, KeyAlgorithm::Ed25519)
                 .await
                 .map_err(map_vault_err)?,
         };
@@ -578,6 +583,68 @@ impl DidSdk<Server> {
         })
     }
 
+    /// 是否配置了本地签名器（开发/测试/试运行）。
+    pub fn has_signer(&self) -> bool {
+        self.vault.is_some()
+    }
+
+    /// 用 `participant-did/` 本地密钥签名（仅配置了 key_vault 时可用）。
+    pub async fn sign_with_participant_key(
+        &self,
+        message: &[u8],
+        ctx: SigningContext,
+    ) -> Result<Signature, DidSdkError> {
+        let _ = ctx;
+        self.backend.confirm_signing().await?;
+        let key_id = self.active_key().await?;
+        let vault = self
+            .vault
+            .as_ref()
+            .ok_or_else(|| DidSdkError::Unsupported("server has no local signer".into()))?;
+        let signature = vault
+            .sign_checked(
+                &key_id,
+                message,
+                KeyNamespace::ParticipantDid,
+                KeyAlgorithm::Ed25519,
+            )
+            .await
+            .map_err(map_vault_err)?;
+        Ok(Signature(signature.0))
+    }
+
+    /// 使用本地 `participant-did/` 密钥签发 VC（开发/测试/试运行）。
+    pub fn issue_self_asserted_vc(
+        &self,
+        claims: serde_json::Value,
+    ) -> Result<VerifiableCredential, DidSdkError> {
+        let vault = self
+            .vault
+            .as_ref()
+            .ok_or_else(|| DidSdkError::Unsupported("server has no local signer".into()))?;
+        let backend = self.backend.clone();
+        block_on_backend(move || async move { backend.confirm_signing().await })?;
+        let issuer = self.participant_did_value()?.to_string();
+        let key_id = block_on_future(self.active_key())?;
+        let mut vc = vc::build_vc(&issuer, claims, None);
+        let signing_input = vc::vc_signing_input(&vc)?;
+        let signature = block_on_future(vault.sign_checked(
+            &key_id,
+            &signing_input,
+            KeyNamespace::ParticipantDid,
+            KeyAlgorithm::Ed25519,
+        ))
+        .map_err(map_vault_err)?;
+        vc.proof = Some(vc::proof_for(&issuer, vc::now_ts(), &signature.0));
+        Ok(vc)
+    }
+
+    fn participant_did_value(&self) -> Result<&str, DidSdkError> {
+        self.participant_did
+            .as_deref()
+            .filter(|did| !did.is_empty())
+            .ok_or_else(|| DidSdkError::ConfigError("server participant_did is required".into()))
+    }
     fn resolve_did_peer_document(&self, did: &str) -> Result<DidDocument, DidSdkError> {
         let docs = self
             .docs

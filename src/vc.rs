@@ -1,22 +1,60 @@
-//! VC / VP 构造、哈希与本地文件存储。
+//! VC / VP 构造、哈希与加密文件存储。
 
 use std::path::{Path, PathBuf};
 
+use argon2::{Algorithm, Argon2, Params, Version};
+use chacha20poly1305::aead::{AeadInPlace, KeyInit};
+use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce, Tag};
 use keyvault_core::crypto::blake2::blake2b256;
 use keyvault_core::signing_input::{issued_vc_v1, vp_v1};
+use zeroize::Zeroize;
 
 use crate::storage::atomic_write;
 use crate::{DidSdkError, Proof, VerifiableCredential, VerifiablePresentation};
 
-/// 本地 VC 文件存储。文件名使用 anchor_id 的 BLAKE2b-256，避免路径注入。
-#[derive(Debug, Clone)]
+const VC_STORE_MAGIC: &[u8; 4] = b"DVCS";
+const VC_META_MAGIC: &[u8; 4] = b"DVCM";
+const VC_STORE_VERSION: u8 = 1;
+const SALT_LEN: usize = 16;
+const NONCE_LEN: usize = 12;
+const TAG_LEN: usize = 16;
+const ARGON2_M_COST: u32 = 65536;
+const ARGON2_T_COST: u32 = 3;
+const ARGON2_P_COST: u32 = 1;
+const VC_PASSWORD_ENV: &str = "DID_SDK_VC_STORAGE_PASSWORD";
+
+/// 加密 VC 文件存储。
+///
+/// 每个 VC 文件格式：`DVCS | version | nonce(12) | ciphertext | tag(16)`。
+/// 密钥由 `DID_SDK_VC_STORAGE_PASSWORD` 或 `.vc_password`（自动生成，0600）
+/// 经 Argon2id + `.vc_meta` salt 派生；密钥只驻留内存。
 pub(crate) struct VcStore {
     root: PathBuf,
+    key: [u8; 32],
+}
+
+impl Drop for VcStore {
+    fn drop(&mut self) {
+        self.key.zeroize();
+    }
 }
 
 impl VcStore {
-    pub(crate) fn new(root: PathBuf) -> Self {
-        Self { root }
+    pub(crate) fn new(root: PathBuf) -> Result<Self, DidSdkError> {
+        std::fs::create_dir_all(&root)
+            .map_err(|error| DidSdkError::ChainUnavailable(format!("create VC dir: {error}")))?;
+        let password = resolve_vc_password(&root)?;
+        let salt = load_or_create_salt(&root)?;
+        let params = Params::new(ARGON2_M_COST, ARGON2_T_COST, ARGON2_P_COST, Some(32))
+            .map_err(|error| DidSdkError::ConfigError(format!("invalid Argon2 params: {error}")))?;
+        let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+        let mut key = [0u8; 32];
+        argon2
+            .hash_password_into(password.as_bytes(), &salt, &mut key)
+            .map_err(|error| DidSdkError::ConfigError(format!("derive VC key: {error}")))?;
+        let mut password = password;
+        password.zeroize();
+        Ok(Self { root, key })
     }
 
     fn path_for(&self, anchor_id: &str) -> PathBuf {
@@ -26,14 +64,89 @@ impl VcStore {
         ))
     }
 
+    fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, DidSdkError> {
+        let mut nonce = [0u8; NONCE_LEN];
+        getrandom::fill(&mut nonce)
+            .map_err(|error| DidSdkError::ChainUnavailable(format!("entropy: {error}")))?;
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(&self.key));
+        let mut ciphertext = plaintext.to_vec();
+        let tag = cipher
+            .encrypt_in_place_detached(Nonce::from_slice(&nonce), VC_STORE_MAGIC, &mut ciphertext)
+            .map_err(|error| DidSdkError::ChainUnavailable(format!("VC encryption: {error}")))?;
+        let mut out = Vec::with_capacity(4 + 1 + NONCE_LEN + ciphertext.len() + TAG_LEN);
+        out.extend_from_slice(VC_STORE_MAGIC);
+        out.push(VC_STORE_VERSION);
+        out.extend_from_slice(&nonce);
+        out.extend_from_slice(&ciphertext);
+        out.extend_from_slice(&tag);
+        Ok(out)
+    }
+
+    fn decrypt(&self, bytes: &[u8]) -> Result<Vec<u8>, DidSdkError> {
+        if bytes.len() < 4 + 1 + NONCE_LEN + TAG_LEN {
+            return Err(DidSdkError::InvalidArgument("VC file too short".into()));
+        }
+        if &bytes[..4] != VC_STORE_MAGIC {
+            return Err(DidSdkError::InvalidArgument("bad VC file magic".into()));
+        }
+        if bytes[4] != VC_STORE_VERSION {
+            return Err(DidSdkError::InvalidArgument(format!(
+                "unsupported VC file version: {}",
+                bytes[4]
+            )));
+        }
+        let nonce_start = 5;
+        let ciphertext_start = nonce_start + NONCE_LEN;
+        let tag_start = bytes.len() - TAG_LEN;
+        let mut ciphertext = bytes[ciphertext_start..tag_start].to_vec();
+        let mut tag = [0u8; TAG_LEN];
+        tag.copy_from_slice(&bytes[tag_start..]);
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(&self.key));
+        cipher
+            .decrypt_in_place_detached(
+                Nonce::from_slice(&bytes[nonce_start..ciphertext_start]),
+                VC_STORE_MAGIC,
+                &mut ciphertext,
+                Tag::from_slice(&tag),
+            )
+            .map_err(|_| DidSdkError::InvalidArgument("VC decryption failed".into()))?;
+        Ok(ciphertext)
+    }
+
+    fn load_vc(&self, path: &Path, anchor_id: &str) -> Result<VerifiableCredential, DidSdkError> {
+        let raw = std::fs::read(path).map_err(|error| {
+            DidSdkError::ChainUnavailable(format!("read {}: {error}", path.display()))
+        })?;
+        // 兼容极早期明文文件：读取后立即重新加密。
+        if raw.first() == Some(&b'{') {
+            let vc: VerifiableCredential = serde_json::from_slice(&raw).map_err(|error| {
+                DidSdkError::InvalidArgument(format!("parse plaintext VC: {error}"))
+            })?;
+            self.put(&vc)?;
+            tracing::warn!(path = %path.display(), "migrated plaintext VC to encrypted form");
+            return Ok(vc);
+        }
+        let plaintext = self.decrypt(&raw)?;
+        let vc: VerifiableCredential = serde_json::from_slice(&plaintext).map_err(|error| {
+            DidSdkError::InvalidArgument(format!("parse VC {}: {error}", path.display()))
+        })?;
+        if vc.anchor_id.as_deref() != Some(anchor_id) {
+            return Err(DidSdkError::InvalidArgument(format!(
+                "VC anchor_id mismatch for {anchor_id}"
+            )));
+        }
+        Ok(vc)
+    }
+
     pub(crate) fn put(&self, vc: &VerifiableCredential) -> Result<(), DidSdkError> {
         let anchor_id = vc
             .anchor_id
             .as_deref()
             .ok_or_else(|| DidSdkError::InvalidArgument("VC is missing anchor_id".into()))?;
-        let bytes = serde_json::to_vec_pretty(vc)
+        let json = serde_json::to_vec(vc)
             .map_err(|error| DidSdkError::InvalidArgument(format!("serialize VC: {error}")))?;
-        atomic_write(&self.path_for(anchor_id), &bytes)
+        let encrypted = self.encrypt(&json)?;
+        atomic_write(&self.path_for(anchor_id), &encrypted)
             .map_err(|error| DidSdkError::ChainUnavailable(format!("write VC: {error}")))
     }
 
@@ -42,13 +155,7 @@ impl VcStore {
         if !path.exists() {
             return Ok(None);
         }
-        let vc = read_vc(&path)?;
-        if vc.anchor_id.as_deref() != Some(anchor_id) {
-            return Err(DidSdkError::InvalidArgument(format!(
-                "VC anchor_id mismatch for {anchor_id}"
-            )));
-        }
-        Ok(Some(vc))
+        self.load_vc(&path, anchor_id).map(Some)
     }
 
     pub(crate) fn list(&self) -> Result<Vec<VerifiableCredential>, DidSdkError> {
@@ -68,12 +175,40 @@ impl VcStore {
             if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
                 continue;
             }
-            match read_vc(&path) {
-                Ok(vc) => out.push(vc),
+            let anchor_id = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or_default()
+                .to_string();
+            // 文件名是 anchor_id 的哈希，无法反推；读取后使用 VC 自己的 anchor_id 校验。
+            match std::fs::read(&path) {
+                Ok(raw) if raw.first() == Some(&b'{') => {
+                    match serde_json::from_slice::<VerifiableCredential>(&raw) {
+                        Ok(vc) => {
+                            if let Err(error) = self.put(&vc) {
+                                tracing::warn!(path = %path.display(), %error, "re-encrypt VC failed");
+                            }
+                            out.push(vc);
+                        }
+                        Err(error) => {
+                            tracing::warn!(path = %path.display(), %error, "skip invalid VC file");
+                        }
+                    }
+                }
+                Ok(raw) => match self.decrypt(&raw).and_then(|plain| {
+                    serde_json::from_slice::<VerifiableCredential>(&plain)
+                        .map_err(|error| DidSdkError::InvalidArgument(format!("parse VC: {error}")))
+                }) {
+                    Ok(vc) => out.push(vc),
+                    Err(error) => {
+                        tracing::warn!(path = %path.display(), %error, "skip invalid VC file");
+                    }
+                },
                 Err(error) => {
-                    tracing::warn!(path = %path.display(), %error, "skip invalid VC file")
+                    tracing::warn!(path = %path.display(), %error, "skip unreadable VC file");
                 }
             }
+            let _ = anchor_id;
         }
         out.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(out)
@@ -91,12 +226,67 @@ impl VcStore {
     }
 }
 
-fn read_vc(path: &Path) -> Result<VerifiableCredential, DidSdkError> {
-    let raw = std::fs::read(path).map_err(|error| {
-        DidSdkError::ChainUnavailable(format!("read {}: {error}", path.display()))
-    })?;
-    serde_json::from_slice(&raw)
-        .map_err(|error| DidSdkError::InvalidArgument(format!("parse {}: {error}", path.display())))
+fn resolve_vc_password(root: &Path) -> Result<String, DidSdkError> {
+    if let Ok(value) = std::env::var(VC_PASSWORD_ENV) {
+        if !value.is_empty() {
+            return Ok(value);
+        }
+    }
+    let path = root.join(".vc_password");
+    if path.exists() {
+        let value = std::fs::read_to_string(&path)
+            .map_err(|error| DidSdkError::ConfigError(format!("read VC password file: {error}")))?;
+        let value = value.trim_end_matches(['\r', '\n']).to_string();
+        if value.is_empty() {
+            return Err(DidSdkError::ConfigError("VC password file is empty".into()));
+        }
+        return Ok(value);
+    }
+    let mut random = [0u8; 32];
+    getrandom::fill(&mut random)
+        .map_err(|error| DidSdkError::ConfigError(format!("entropy: {error}")))?;
+    let password = bs58::encode(random).into_string();
+    random.zeroize();
+    atomic_write(&path, password.as_bytes())
+        .map_err(|error| DidSdkError::ConfigError(format!("write VC password: {error}")))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&path)
+            .map_err(|error| DidSdkError::ConfigError(error.to_string()))?
+            .permissions();
+        perms.set_mode(0o600);
+        std::fs::set_permissions(&path, perms)
+            .map_err(|error| DidSdkError::ConfigError(error.to_string()))?;
+    }
+    Ok(password)
+}
+
+fn load_or_create_salt(root: &Path) -> Result<[u8; SALT_LEN], DidSdkError> {
+    let path = root.join(".vc_meta");
+    if path.exists() {
+        let bytes = std::fs::read(&path)
+            .map_err(|error| DidSdkError::ConfigError(format!("read VC meta: {error}")))?;
+        if bytes.len() != 4 + 1 + SALT_LEN
+            || &bytes[..4] != VC_META_MAGIC
+            || bytes[4] != VC_STORE_VERSION
+        {
+            return Err(DidSdkError::ConfigError("invalid VC meta file".into()));
+        }
+        let mut salt = [0u8; SALT_LEN];
+        salt.copy_from_slice(&bytes[5..]);
+        return Ok(salt);
+    }
+    let mut salt = [0u8; SALT_LEN];
+    getrandom::fill(&mut salt)
+        .map_err(|error| DidSdkError::ConfigError(format!("entropy: {error}")))?;
+    let mut bytes = Vec::with_capacity(4 + 1 + SALT_LEN);
+    bytes.extend_from_slice(VC_META_MAGIC);
+    bytes.push(VC_STORE_VERSION);
+    bytes.extend_from_slice(&salt);
+    atomic_write(&path, &bytes)
+        .map_err(|error| DidSdkError::ConfigError(format!("write VC meta: {error}")))?;
+    Ok(salt)
 }
 
 /// Unix 秒 → RFC3339 UTC。
