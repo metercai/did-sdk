@@ -143,8 +143,8 @@ DID_SDK_HOME=$PWD/.local-home ./target/release/examples/mini_cli
 
 ## 5. 未完成 / 外部依赖
 
-1. **GitHub 远程仓库**：环境无 `gh`、无 GitHub token、SSH key 未被授权；
-   尚未创建/推送 `metercai/did-sdk`。因此 S1/S3 的 GitHub Actions 尚未实跑。
+1. **GitHub 远程仓库**：已配置 `origin = git@github.com:metercai/did-sdk.git`，但 GitHub API 返回 404（仓库尚未创建）；环境无 `gh`、无 GitHub token、SSH key 未被授权。
+   因此尚未推送，S1/S3 的 GitHub Actions 尚未实跑。
 2. **真实 identity-chain**：无节点与 pallet 元数据；D7 仅完成代码路径与
    `#[ignore]` 测试入口。
 3. **发布**：crates.io / PyPI / npm 未发布；需要凭据与包名所有权确认。

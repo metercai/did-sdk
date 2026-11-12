@@ -263,7 +263,7 @@ SdkCore { vault: Arc<dyn KeyVault>, config: DidSdkConfig, active_key: RwLock<Opt
 | **D-14** | `chain.rs` 需要 `./metadata/identity_chain.scale`，但仓库没有该链的 pallet/type 定义 | POC 用 subxt 运行时元数据做动态 storage 查询；pallet/entry 名可通过环境变量覆盖；真实链集成测试 `#[ignore]`，S3/D7 标注“需链 fixture” | 不提交错误元数据；Chain 模式可编译、可单测，但不能声称真实链验收通过。若评审能提供元数据，改为静态 metadata |
 | **D-15** | `types.rs` 字段未给出；VC/VP 时间格式未定 | 采用附录 A 的字段；VC 使用 W3C 风格的 `issuanceDate`/`expirationDate`（RFC3339）；内部时间戳用 u64 Unix 秒，自实现 UTC 格式化（不引入时间 crate） | 避免 `time`/`chrono` 的 MSRV 风险；字段固定后三语言 JSON 形状一致 |
 | **D-16** | 测试需要设环境变量，但 Rust 2024 的 `set_var` 是 `unsafe`，workspace `unsafe_code = "forbid"` | 新增 dev-dependency `temp-env` 做测试内环境隔离；production 代码不设环境变量；测试模块局部 `allow(clippy::unwrap_used/expect_used)` | 否则配置测试无法写；`temp-env` 内部封装 unsafe，业务代码仍保持 forbid |
-| **D-17** | 规格要求创建 GitHub 仓库 `did-sdk` | 本地 `git init` 已完成；`repository` 暂填 `https://github.com/metercai/did-sdk`（待确认）；远程创建/推送由用户执行 | 环境无 `gh` 且无凭据。若 org 不是 `metercai`，评审时给出正确值即可 |
+| **D-17** | 规格要求创建 GitHub 仓库 `did-sdk` | 已确认 org = `metercai`；本地 git 与 `origin git@github.com:metercai/did-sdk.git` 已配置；远程仓库创建/首次推送需 GitHub 凭据 | 环境无 `gh`、无 token、SSH key 未被 GitHub 授权；代码已就绪，等待推送后跑 CI |
 | **D-18** | 规格要求发布三套产物，但未给发布凭据/版本策略 | 本期只做**可重复构建 + 本地安装验证**；发布另立任务，版本从 0.1.0 起 | 避免把“能否 publish”混入代码验收 |
 
 > **批准方式**：回复“D-01…D-18 全部批准”，或逐条给出修改。任何一条被否决，
@@ -658,7 +658,7 @@ workflow 语法与脚本逻辑，不能替代 CI 实跑。
 - [x] **D-14** Chain 动态元数据 + `#[ignore]`，不提交 `.scale`
 - [x] **D-15** 附录 A 的类型字段与 RFC3339 时间
 - [x] **D-16** `temp-env` 做环境变量测试隔离
-- [x] **D-17** 本地 git；GitHub 远程由用户创建（org 确认：`metercai`？）
+- [x] **D-17** 本地 git + origin；org = `metercai`，首次推送需凭据
 - [x] **D-18** 本期不 publish，只做构建/安装验证
 
 **其他需要确认的问题**
@@ -666,7 +666,7 @@ workflow 语法与脚本逻辑，不能替代 CI 实跑。
 1. 是否接受总工期约 **9.5 个工作日**？有无优先阶段（例如必须先出 Python）？
 2. Chain 模式是否接受“编译 + 单测 + ignore 集成测试”的 POC 范围？
 3. 是否有真实 `identity_chain` 的 pallet / 存储项 / 元数据可以提供？
-4. `repository` 的 GitHub org 是否为 `metercai`？
+4. ~~`repository` 的 GitHub org 是否为 `metercai`？~~ 已确认。
 5. 是否需要 Apache-2.0 `LICENSE` 文件？（当前 README 引用但文件未创建）
 
 **评审结论（2026-11-12）**：已批准。实施按 P0 → P6 推进，每阶段一个 commit，

@@ -80,7 +80,7 @@
 
 | 项 | 原因 | 解除条件 |
 |---|---|---|
-| S1 / S3 跨平台 CI | 本地无法认证 GitHub；未创建远程仓库 | 用户创建 `metercai/did-sdk` 并推送；或提供可用 token / 已授权 SSH key |
+| S1 / S3 跨平台 CI | 仓库尚未创建（API 404）；本地无 GitHub 凭据 | 用户创建 `metercai/did-sdk` 并推送；或提供可用 token / 已授权 SSH key |
 | D7 真实链接入 | 无 identity-chain 节点与 pallet 元数据 | 提供节点 + `DID_SDK_CHAIN_ENDPOINT` + pallet/storage 名称后跑 `#[ignore]` 测试 |
 | crates.io / PyPI / npm 发布 | 无凭据、包名所有权未确认 | 另立发布任务 |
 | npm 依赖审计告警 | devDependencies（vitest 等）传递依赖 | 发布前执行 `npm audit` 评估；不影响 addon 运行时 |
