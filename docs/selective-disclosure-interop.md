@@ -1,7 +1,7 @@
 # Selective Disclosure Interoperability Contract
 
 This document fixes the byte-level contract between `did-sdk` / `keyvault-core` and `chain-sdk`
-for SD-JWT selective disclosure. Both sides must use the same primitives; no independent
+for VC-native salted-hash selective disclosure. It is not a JWT-based contract. Both sides must use the same primitives; no independent
 implementations are permitted.
 
 ---
@@ -106,7 +106,7 @@ directly.
 
 ## 7. Privacy Boundary
 
-SD-JWT prevents hidden-claim disclosure, forged claims, cross-VC linkage (distinct salts) and
+Selective disclosure prevents hidden-claim disclosure, forged claims, cross-VC linkage (distinct salts) and
 dictionary attacks. It does **not** prevent linkability across presentations of the same VC,
 colluding verifiers reconstructing attributes, or verifier retention of disclosed values.
 

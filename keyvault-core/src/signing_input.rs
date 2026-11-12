@@ -77,7 +77,7 @@ pub fn vp_v1(holder: &str, challenge: &str, domain: &str, vc_hashes: &[String]) 
     out.into_bytes()
 }
 
-/// 选择性披露 VP 的签名对象（SD-JWT 扩展）。
+/// 选择性披露 VP 的签名对象（selective disclosure 扩展）。
 ///
 /// 格式：
 /// ```text

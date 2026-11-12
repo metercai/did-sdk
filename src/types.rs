@@ -180,7 +180,7 @@ pub struct VcVerificationResult {
     pub reason: Option<String>,
 }
 
-/// SD-JWT Disclosure：`[salt(base64url), claim_name, claim_value]`。
+/// Selective-disclosure disclosure：`[salt(base64url), claim_name, claim_value]`。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Disclosure {
     /// 盐（base64url，无 padding）。
@@ -245,7 +245,7 @@ pub struct SelectiveVpRequest {
     pub disclose: Vec<String>,
 }
 
-/// VP 验证结果（SD-JWT 扩展）。
+/// VP 验证结果（selective disclosure 扩展）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VpVerificationResult {
     /// 是否通过。
@@ -323,7 +323,7 @@ pub struct VerifiablePresentation {
     pub challenge: String,
     /// domain。
     pub domain: String,
-    /// SD-JWT Disclosures；`None` 表示非选择性披露 VP。
+    /// Selective-disclosure disclosures；`None` 表示非选择性披露 VP。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub disclosures: Option<Vec<Disclosure>>,
     /// proof。

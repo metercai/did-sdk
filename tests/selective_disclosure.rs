@@ -1,4 +1,4 @@
-//! SD-JWT 选择性披露：签发、存储、筛选、VP 构造与验证。
+//! selective disclosure 选择性披露：签发、存储、筛选、VP 构造与验证。
 
 #![allow(
     clippy::unwrap_used,

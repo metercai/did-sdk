@@ -1,4 +1,4 @@
-//! SD-JWT 选择性披露辅助：`_sd` 构造、Disclosure 筛选与验证。
+//! selective disclosure 选择性披露辅助：`_sd` 构造、Disclosure 筛选与验证。
 
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};

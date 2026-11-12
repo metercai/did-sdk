@@ -10,7 +10,7 @@ DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` �
 × **Mock / Centralized 两种后端** × **did:key / did:peer / did:web 三种 DID 方法**。
 
 > **当前状态：已按更新版规格重构；当前版本 [`v0.2.0`](https://github.com/metercai/did-sdk/releases/tag/v0.2.0) 已发布。**
-> `v0.2.0` 包含选择性披露（SD-JWT）与 Client/Server 双产物。
+> `v0.2.0` 包含选择性披露（selective disclosure）与 Client/Server 双产物。
 > - Spec: [DidSdk Interface Contract](docs/DidSdk-Interface-Contract.md)
 > - Spec: [KeyVaultCore Interface Contract](docs/KeyVaultCore-Interface-Contract.md)
 > - Spec: [Selective Disclosure Interop](docs/selective-disclosure-interop.md)
@@ -251,7 +251,7 @@ VC 的 `proof` 结构：
 }
 ```
 
-### 5.1 选择性披露（SD-JWT）
+### 5.1 选择性披露（salted-hash，非 JWT）
 
 支持在 `credentialSubject` 中生成 `_sd` / `_sd_alg`，把可披露属性移出 VC 原文，
 并与 Disclosures 绑定加密存储：
@@ -280,7 +280,7 @@ assert!(result.verified);
 - 每张 VC、每个属性独立 16 字节 CSPRNG 盐；
 - `H = SHA-256(base64url(salt) || base64url(name) || base64url(value))`；
 - VP 的 `disclosures` 字段 + `vp_sd_v1` 签名覆盖 VC 原文、Disclosures、challenge、domain；
-- 未披露属性对验证方不可见；同一 VC 跨出示可关联与跨验证方合谋是 SD-JWT 固有边界。
+- 未披露属性对验证方不可见；同一 VC 跨出示可关联与跨验证方合谋是选择性披露的固有边界。
 
 ---
 

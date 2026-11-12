@@ -21,7 +21,7 @@
 - `FileKeystore` (encrypted files) and `MemoryKeystore` (tests / mock);
 - namespace and algorithm isolation;
 - Ed25519 / sr25519, SS58, base58, multibase and BLAKE2 primitives;
-- the SD-JWT salt/hash primitives;
+- the selective-disclosure salt/hash primitives;
 - the single implementation of all protocol signing-input byte layouts.
 
 ### 1.2 Responsibilities and boundaries
@@ -36,7 +36,7 @@ chain-owner-sdk ─┘    KeyVault trait + FileKeystore + namespace + signing_in
 |---|---|
 | Private-key storage and use | **keyvault-core** |
 | Namespace / algorithm enforcement | **keyvault-core** |
-| SD-JWT salt and salted hash | **keyvault-core** (`sd`) |
+| Selective-disclosure salt and salted hash | **keyvault-core** (`sd`) |
 | Signing-input byte layout | **keyvault-core** (`signing_input`) |
 | DID methods, VC wallet, VP construction | `did-sdk` |
 | Anchor queries, chain writes | `chain-sdk` |
@@ -251,7 +251,7 @@ pub mod crypto {
 
 ---
 
-## 7. SD-JWT Utilities
+## 7. Selective-Disclosure Utilities
 
 ```rust
 pub mod sd {

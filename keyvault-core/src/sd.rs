@@ -1,4 +1,4 @@
-//! SD-JWT 选择性披露原语：盐值、base64url、盐化哈希。
+//! selective disclosure 选择性披露原语：盐值、base64url、盐化哈希。
 //!
 //! 哈希公式（与附件一致）：
 //! `SHA-256(base64url(salt) || base64url(name) || base64url(value))`。

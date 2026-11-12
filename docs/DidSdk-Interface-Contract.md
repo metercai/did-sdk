@@ -23,6 +23,10 @@ applications and service-side Rust applications. It is parameterised by two mode
 
 It supports two backends: `Mock` (in-process) and `Centralized` (read-only HTTP DID resolution).
 
+The selective-disclosure mechanism is **VC-native salted-hash selective disclosure**, not a
+JWT-based mechanism. The same salted-hash construction is used inside a W3C VC/VP; no JWT is
+issued or verified.
+
 ### 1.2 Responsibilities and boundaries
 
 ```text
@@ -30,7 +34,7 @@ client app / aimail-sdk            chain-sdk / chain-owner-sdk
         │ DidSdk<Client>                    │ DidSdk<Server>
         ▼                                   ▼
                  did-sdk v0.2 (this contract)
-        DID methods + VC wallet + SD-JWT disclosures
+        DID methods + VC wallet + selective-disclosure disclosures
         no chain access, no anchor query, no subxt
         │ depends on
         ▼
@@ -41,7 +45,7 @@ client app / aimail-sdk            chain-sdk / chain-owner-sdk
 | Concern | Owner |
 |---|---|
 | DID methods, VC issuance/storage/presentation | **did-sdk** |
-| SD-JWT salt/hash, disclosure storage, selective VP | **did-sdk** |
+| Selective-disclosure salt/hash, disclosure storage, selective VP | **did-sdk** |
 | Anchor queries, anchor writes, revocation checks | **chain-sdk** |
 | Participant registration, operator rotation, delegated anchoring | `chain-owner-sdk` |
 | Private keys, namespace enforcement | `keyvault-core` |
@@ -53,7 +57,7 @@ client app / aimail-sdk            chain-sdk / chain-owner-sdk
 ### 1.3 Non-goals
 
 - Chain RPC, anchor existence/revocation checks, extrinsic submission.
-- BBS+ or predicate proofs; SD-JWT is the current mechanism.
+- BBS+ or predicate proofs; salted-hash selective disclosure is the current mechanism.
 - UI rendering of attribute-selection screens; the SDK exposes the selection API.
 - Production HSM/device secure enclave implementations (future `keyvault-*` crates).
 
@@ -438,7 +442,7 @@ DVCS | version | nonce(12) | ciphertext | tag(16)
 - the encrypted envelope contains `{ vc, disclosures }`;
 - legacy plaintext VC files are migrated on read.
 
-### 8.2 SD-JWT selective disclosure
+### 8.2 Selective Disclosure for VCs
 
 #### 8.2.1 VC shape
 
@@ -550,7 +554,7 @@ of the full VC JSON. See `selective-disclosure-interop.md` for the byte-level co
 
 | ID | Criterion |
 |---|---|
-| D1 | Contract covers DID methods, VC wallet and SD-JWT |
+| D1 | Contract covers DID methods, VC wallet and selective disclosure |
 | D2 | Client/Server methods are compile-time isolated |
 | D3 | `mock` / `centralized` mode switching |
 | D4 | Both backends have identical semantics and errors |
@@ -589,7 +593,7 @@ of the full VC JSON. See `selective-disclosure-interop.md` for the byte-level co
 
 ## 11. Compatibility and Change Control
 
-- `v0.1.0` did not contain SD-JWT; `v0.2.0` does.
+- `v0.1.0` did not contain selective disclosure; `v0.2.0` does.
 - `v0.1.0` used `chain` backend; R1 removed it before `v0.2.0`.
 - Breaking changes require a major/minor version decision and updates to this document,
   `KeyVaultCore-Interface-Contract.md` and `selective-disclosure-interop.md`.
