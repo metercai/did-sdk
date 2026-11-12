@@ -19,5 +19,11 @@ python -m pip install --quiet pytest
 python -m pip install --quiet --force-reinstall bindings/python/dist/*.whl
 python -m pytest bindings/python/tests
 
+( cd bindings/python-server && maturin build --release --out dist )
+python -m pip install --quiet --force-reinstall bindings/python-server/dist/*.whl
+python -m pytest bindings/python-server/tests
+
 echo "== Node =="
 ( cd bindings/node && npm ci && npx napi build --platform --release && npm test )
+
+( cd bindings/node-server && npm install --no-audit --no-fund && npx napi build --platform --release && npm test )

@@ -3,9 +3,9 @@ requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "did-sdk"
+name = "did-sdk-client"
 version = "0.1.0"
-description = "DID SDK: Rust core + Python bindings (Mock/Centralized/Chain modes)"
+description = "DID SDK Client Python binding (Mock/Centralized/Chain modes)"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }

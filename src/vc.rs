@@ -40,10 +40,16 @@ impl Drop for VcStore {
 }
 
 impl VcStore {
-    pub(crate) fn new(root: PathBuf) -> Result<Self, DidSdkError> {
+    pub(crate) fn new(
+        root: PathBuf,
+        password: Option<secrecy::SecretString>,
+    ) -> Result<Self, DidSdkError> {
         std::fs::create_dir_all(&root)
             .map_err(|error| DidSdkError::ChainUnavailable(format!("create VC dir: {error}")))?;
-        let password = resolve_vc_password(&root)?;
+        let password = match password {
+            Some(password) => secrecy::ExposeSecret::expose_secret(&password).to_string(),
+            None => resolve_vc_password(&root)?,
+        };
         let salt = load_or_create_salt(&root)?;
         let params = Params::new(ARGON2_M_COST, ARGON2_T_COST, ARGON2_P_COST, Some(32))
             .map_err(|error| DidSdkError::ConfigError(format!("invalid Argon2 params: {error}")))?;

@@ -6,10 +6,12 @@ use std::sync::Arc;
 
 use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
+use secrecy::SecretString;
 
 use did_sdk::config::{ConfigOverrides, resolve_config};
 use did_sdk::{
-    ClientConfig, DidSdkError as CoreError, PeerNumalgo, VerifiableCredential, build_client_sdk,
+    ClientConfig, DidSdkError as CoreError, DidSdkMode, PeerNumalgo, Proof, ServerConfig,
+    VerifiableCredential, build_client_sdk, build_server_sdk,
 };
 
 type Sdk = did_sdk::DidSdk<did_sdk::Client>;
@@ -78,6 +80,239 @@ fn parse_numalgo(value: &str) -> napi::Result<PeerNumalgo> {
         other => Err(napi::Error::from_reason(format!(
             "InvalidArgument: invalid PeerNumalgo {other}"
         ))),
+    }
+}
+
+fn parse_mode(value: &str) -> napi::Result<DidSdkMode> {
+    match value.to_ascii_lowercase().as_str() {
+        "mock" => Ok(DidSdkMode::Mock),
+        "centralized" => Ok(DidSdkMode::Centralized),
+        "chain" => Ok(DidSdkMode::Chain),
+        other => Err(napi::Error::from_reason(format!(
+            "InvalidArgument: invalid mode {other}"
+        ))),
+    }
+}
+
+fn server_config(
+    participant_did: String,
+    overrides: Option<JsConfigOverrides>,
+) -> napi::Result<ServerConfig> {
+    let overrides = overrides.unwrap_or(JsConfigOverrides {
+        mode: None,
+        vc_storage_path: None,
+        key_vault_path: None,
+        key_vault_scheme: None,
+        key_vault_password: None,
+        key_vault_password_file: None,
+        centralized_endpoint: None,
+        chain_endpoint: None,
+        cache_ttl_secs: None,
+    });
+    let mut config = ServerConfig::default();
+    config.participant_did = participant_did;
+    if let Some(mode) = overrides.mode {
+        config.mode = parse_mode(&mode)?;
+    }
+    if let Some(path) = overrides.vc_storage_path {
+        config.vc_storage_path = path.into();
+    }
+    if let Some(endpoint) = overrides.centralized_endpoint {
+        config.centralized_endpoint = endpoint;
+    }
+    if let Some(endpoint) = overrides.chain_endpoint {
+        config.chain_endpoint = endpoint;
+    }
+    if let Some(ttl) = overrides.cache_ttl_secs {
+        config.cache_ttl_secs = u64::from(ttl);
+    }
+    if let Some(scheme) = overrides.key_vault_scheme {
+        if scheme == "none" {
+            config.key_vault = None;
+        } else {
+            let mut key_vault = config.key_vault.unwrap_or_default();
+            key_vault.scheme = scheme;
+            if let Some(path) = overrides.key_vault_path {
+                key_vault.path = path.into();
+            }
+            if let Some(file) = overrides.key_vault_password_file {
+                key_vault.password_file = file.into();
+            }
+            config.key_vault = Some(key_vault);
+        }
+    }
+    if let Some(password) = overrides.key_vault_password {
+        config.resolved_password = Some(SecretString::from(password));
+    }
+    Ok(config)
+}
+
+/// did-sdk Server Node 客户端。
+#[napi]
+pub struct ServerDidSdk {
+    inner: Arc<did_sdk::DidSdk<did_sdk::Server>>,
+    config: ServerConfig,
+}
+
+#[napi]
+impl ServerDidSdk {
+    #[napi(constructor)]
+    pub fn new(
+        participant_did: String,
+        overrides: Option<JsConfigOverrides>,
+    ) -> napi::Result<Self> {
+        let config = server_config(participant_did, overrides)?;
+        let sdk = build_server_sdk(&config).map_err(to_napi_err)?;
+        Ok(Self { inner: sdk, config })
+    }
+
+    #[napi(getter)]
+    pub fn participant_did(&self) -> String {
+        self.config.participant_did.clone()
+    }
+
+    #[napi(getter)]
+    pub fn has_signer(&self) -> bool {
+        self.inner.has_signer()
+    }
+
+    #[napi]
+    pub async fn resolve_did_web(&self, did: String) -> napi::Result<serde_json::Value> {
+        let document = self
+            .inner
+            .resolve_did_web(&did)
+            .await
+            .map_err(to_napi_err)?;
+        to_json(&document)
+    }
+
+    #[napi]
+    pub fn assemble_vc_with_proof(
+        &self,
+        claims: serde_json::Value,
+        subject_did: String,
+        proof: serde_json::Value,
+    ) -> napi::Result<serde_json::Value> {
+        let proof: Proof = serde_json::from_value(proof)
+            .map_err(|error| napi::Error::from_reason(format!("InvalidArgument: {error}")))?;
+        let vc = self
+            .inner
+            .assemble_vc_with_proof(claims, &subject_did, proof)
+            .map_err(to_napi_err)?;
+        to_json(&vc)
+    }
+
+    #[napi]
+    pub async fn verify_vc(&self, vc: serde_json::Value) -> napi::Result<serde_json::Value> {
+        let vc: VerifiableCredential = serde_json::from_value(vc)
+            .map_err(|error| napi::Error::from_reason(format!("InvalidArgument: {error}")))?;
+        let result = self.inner.verify_vc(&vc).await.map_err(to_napi_err)?;
+        to_json(&result)
+    }
+
+    #[napi]
+    pub async fn store_vc(&self, vc: serde_json::Value) -> napi::Result<()> {
+        let vc: VerifiableCredential = serde_json::from_value(vc)
+            .map_err(|error| napi::Error::from_reason(format!("InvalidArgument: {error}")))?;
+        self.inner.store_vc(vc).await.map_err(to_napi_err)
+    }
+
+    #[napi]
+    pub async fn get_vc(&self, anchor_id: String) -> napi::Result<Option<serde_json::Value>> {
+        let vc = self.inner.get_vc(&anchor_id).await.map_err(to_napi_err)?;
+        vc.map(|vc| to_json(&vc)).transpose()
+    }
+
+    #[napi]
+    pub async fn list_vcs(&self) -> napi::Result<Vec<serde_json::Value>> {
+        let vcs = self.inner.list_vcs().await.map_err(to_napi_err)?;
+        vcs.iter().map(to_json).collect()
+    }
+
+    #[napi]
+    pub async fn remove_vc(&self, anchor_id: String) -> napi::Result<()> {
+        self.inner.remove_vc(&anchor_id).await.map_err(to_napi_err)
+    }
+
+    #[napi]
+    pub async fn build_vp(
+        &self,
+        vcs: Vec<serde_json::Value>,
+        challenge: String,
+        domain: String,
+    ) -> napi::Result<serde_json::Value> {
+        let vcs = vcs
+            .into_iter()
+            .map(|value| {
+                serde_json::from_value::<VerifiableCredential>(value)
+                    .map_err(|error| napi::Error::from_reason(format!("InvalidArgument: {error}")))
+            })
+            .collect::<napi::Result<Vec<_>>>()?;
+        let vp = self
+            .inner
+            .build_vp(vcs, &challenge, &domain)
+            .await
+            .map_err(to_napi_err)?;
+        to_json(&vp)
+    }
+
+    #[napi]
+    pub fn resolve_did(&self, did: String) -> napi::Result<Option<serde_json::Value>> {
+        let record = self.inner.resolve_did(&did).map_err(to_napi_err)?;
+        record.map(|record| to_json(&record)).transpose()
+    }
+
+    #[napi]
+    pub async fn get_anchor(&self, anchor_id: String) -> napi::Result<serde_json::Value> {
+        let anchor = self
+            .inner
+            .get_anchor(&anchor_id)
+            .await
+            .map_err(to_napi_err)?;
+        to_json(&anchor)
+    }
+
+    #[napi]
+    pub async fn sign_with_participant_key(
+        &self,
+        message: Buffer,
+        context: Option<JsSigningContext>,
+    ) -> napi::Result<Buffer> {
+        let context = context.unwrap_or(JsSigningContext {
+            purpose: "sign".into(),
+            payload_summary: None,
+            requestor: None,
+        });
+        let signature = self
+            .inner
+            .sign_with_participant_key(
+                message.as_ref(),
+                did_sdk::SigningContext {
+                    purpose: context.purpose,
+                    payload_summary: context.payload_summary.unwrap_or_default(),
+                    requestor: context.requestor,
+                },
+            )
+            .await
+            .map_err(to_napi_err)?;
+        Ok(Buffer::from(signature.0))
+    }
+
+    #[napi]
+    pub async fn issue_self_asserted_vc(
+        &self,
+        claims: serde_json::Value,
+    ) -> napi::Result<serde_json::Value> {
+        let vc = self
+            .inner
+            .issue_self_asserted_vc(claims)
+            .map_err(to_napi_err)?;
+        to_json(&vc)
+    }
+
+    #[napi]
+    pub fn resolved_config(&self) -> napi::Result<serde_json::Value> {
+        to_json(&self.config)
     }
 }
 

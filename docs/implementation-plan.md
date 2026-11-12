@@ -20,6 +20,10 @@
 > [`docs/implementation-report.md`](implementation-report.md)、
 > [`docs/acceptance-checklist.md`](acceptance-checklist.md) 为准。
 >
+> 2026-11-12 追加：Client/Server 双产物（`did-sdk-client`/`did-sdk-server`、
+> `did-sdk-client`/`did-sdk-server` wheel、`@did-sdk/client`/`@did-sdk/server` addon），
+> Server 默认 FileKeystore 签名器，VC 密文存储。
+>
 > 主要破坏性变化：`DidRecord`、`VerifyResult`、`IssueAuthorizationSignature`、
 > `Proof`、`KeyId` namespace 前缀、FileKeystore v2（`.enc`）均已变更。
 

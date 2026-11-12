@@ -21,6 +21,25 @@ export interface JsSigningContext {
   payloadSummary?: string
   requestor?: string
 }
+/** did-sdk Server Node 客户端。 */
+export declare class ServerDidSdk {
+  constructor(participantDid: string, overrides?: JsConfigOverrides | undefined | null)
+  get participantDid(): string
+  get hasSigner(): boolean
+  resolveDidWeb(did: string): Promise<any>
+  assembleVcWithProof(claims: any, subjectDid: string, proof: any): any
+  verifyVc(vc: any): Promise<any>
+  storeVc(vc: any): Promise<void>
+  getVc(anchorId: string): Promise<any | null>
+  listVcs(): Promise<Array<any>>
+  removeVc(anchorId: string): Promise<void>
+  buildVp(vcs: Array<any>, challenge: string, domain: string): Promise<any>
+  resolveDid(did: string): any | null
+  getAnchor(anchorId: string): Promise<any>
+  signWithParticipantKey(message: Buffer, context?: JsSigningContext | undefined | null): Promise<Buffer>
+  issueSelfAssertedVc(claims: any): Promise<any>
+  resolvedConfig(): any
+}
 /** did-sdk Client Node 客户端。 */
 export declare class DidSdk {
   constructor(overrides?: JsConfigOverrides | undefined | null)

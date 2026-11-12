@@ -19,9 +19,12 @@ pub(crate) struct SdkCore {
 }
 
 impl SdkCore {
-    pub(crate) fn new(vc_storage_path: std::path::PathBuf) -> Result<Self, DidSdkError> {
+    pub(crate) fn new(
+        vc_storage_path: std::path::PathBuf,
+        vc_password: Option<secrecy::SecretString>,
+    ) -> Result<Self, DidSdkError> {
         Ok(Self {
-            vcs: VcStore::new(vc_storage_path)?,
+            vcs: VcStore::new(vc_storage_path, vc_password)?,
             handler: StdRwLock::new(None),
             active_key: RwLock::new(None),
         })

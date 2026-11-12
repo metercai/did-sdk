@@ -26,6 +26,7 @@ fn server_config(dir: &Path) -> ServerConfig {
     config.mode = DidSdkMode::Mock;
     config.participant_did = "did:web:issuer.example.com".into();
     config.vc_storage_path = dir.join("server-vc");
+    config.key_vault = None;
     config
 }
 
@@ -89,4 +90,31 @@ async fn server_vc_is_stored_as_ciphertext() {
     let bytes = std::fs::read(file).unwrap();
     assert!(bytes.starts_with(b"DVCS"));
     assert!(!String::from_utf8_lossy(&bytes).contains("issuer"));
+}
+
+#[tokio::test]
+async fn client_vc_key_follows_keyvault_password() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = client_config(dir.path());
+    let sdk = build_client_sdk(&config).unwrap();
+    sdk.generate_did_key().unwrap();
+    let vc = sdk
+        .issue_self_asserted_vc(serde_json::json!({"name": "Alice"}))
+        .unwrap();
+    let anchor_id = vc.anchor_id.clone().unwrap();
+    sdk.store_vc(vc).await.unwrap();
+
+    let mut wrong = config.clone();
+    wrong.resolved_password = Some(SecretString::from("wrong-password".to_string()));
+    let reopened = build_client_sdk(&wrong).unwrap();
+    assert!(reopened.get_vc(&anchor_id).await.is_err());
+}
+
+#[test]
+fn server_default_has_file_keyvault() {
+    let config = ServerConfig::default();
+    assert_eq!(
+        config.key_vault.as_ref().map(|vault| vault.scheme.as_str()),
+        Some("file-keystore")
+    );
 }

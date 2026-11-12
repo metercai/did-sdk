@@ -1,0 +1,26 @@
+[package]
+name = "did-sdk-python-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "_did_sdk"
+crate-type = ["cdylib"]
+path = "../python/src/lib.rs"
+
+[dependencies]
+did-sdk = { path = "../.." }
+keyvault-core = { path = "../../keyvault-core" }
+pyo3 = { workspace = true }
+pyo3-async-runtimes = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+secrecy = { workspace = true }
+pythonize = "0.23"
+hex = { workspace = true }
+
+[lints]
+workspace = true

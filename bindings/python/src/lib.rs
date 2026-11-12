@@ -9,12 +9,14 @@ use pyo3::create_exception;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBytes, PyDict};
+use secrecy::SecretString;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use did_sdk::config::{ConfigOverrides, resolve_config};
 use did_sdk::{
-    ClientConfig, DidSdkError as CoreError, PeerNumalgo, VerifiableCredential, build_client_sdk,
+    ClientConfig, DidSdkError as CoreError, DidSdkMode, PeerNumalgo, Proof, ServerConfig,
+    VerifiableCredential, build_client_sdk, build_server_sdk,
 };
 
 type Sdk = did_sdk::DidSdk<did_sdk::Client>;
@@ -491,9 +493,245 @@ impl DidSdk {
     }
 }
 
+fn parse_mode(value: &str) -> PyResult<DidSdkMode> {
+    match value.to_ascii_lowercase().as_str() {
+        "mock" => Ok(DidSdkMode::Mock),
+        "centralized" => Ok(DidSdkMode::Centralized),
+        "chain" => Ok(DidSdkMode::Chain),
+        other => Err(PyValueError::new_err(format!("invalid mode: {other}"))),
+    }
+}
+
+fn server_config(participant_did: String, overrides: ConfigOverrides) -> PyResult<ServerConfig> {
+    let mut config = ServerConfig::default();
+    config.participant_did = participant_did;
+    if let Some(mode) = overrides.mode {
+        config.mode = parse_mode(&mode)?;
+    }
+    if let Some(path) = overrides.vc_storage_path {
+        config.vc_storage_path = path;
+    }
+    if let Some(endpoint) = overrides.centralized_endpoint {
+        config.centralized_endpoint = endpoint;
+    }
+    if let Some(endpoint) = overrides.chain_endpoint {
+        config.chain_endpoint = endpoint;
+    }
+    if let Some(ttl) = overrides.cache_ttl_secs {
+        config.cache_ttl_secs = ttl;
+    }
+    if let Some(scheme) = overrides.key_vault_scheme {
+        if scheme == "none" {
+            config.key_vault = None;
+        } else {
+            let mut key_vault = config.key_vault.unwrap_or_default();
+            key_vault.scheme = scheme;
+            if let Some(path) = overrides.key_vault_path {
+                key_vault.path = path;
+            }
+            if let Some(file) = overrides.key_vault_password_file {
+                key_vault.password_file = file;
+            }
+            config.key_vault = Some(key_vault);
+        }
+    }
+    if let Some(password) = overrides.key_vault_password {
+        config.resolved_password = Some(SecretString::from(password));
+    }
+    Ok(config)
+}
+
+/// did-sdk Server Python 客户端。
+#[pyclass]
+pub struct ServerDidSdk {
+    inner: Arc<did_sdk::DidSdk<did_sdk::Server>>,
+    config: ServerConfig,
+}
+
+#[pymethods]
+impl ServerDidSdk {
+    #[new]
+    #[pyo3(signature = (participant_did, **overrides))]
+    fn new(participant_did: String, overrides: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+        let overrides = parse_overrides(overrides)?;
+        let config = server_config(participant_did, overrides)?;
+        let sdk = build_server_sdk(&config).map_err(to_pyerr)?;
+        Ok(Self { inner: sdk, config })
+    }
+
+    #[getter]
+    fn participant_did(&self) -> String {
+        self.config.participant_did.clone()
+    }
+
+    #[getter]
+    fn has_signer(&self) -> bool {
+        self.inner.has_signer()
+    }
+
+    /// 解析 did:web。
+    fn resolve_did_web<'py>(&self, py: Python<'py>, did: String) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let document = inner.resolve_did_web(&did).await.map_err(to_pyerr)?;
+            Python::with_gil(|py| to_py_object(py, &document))
+        })
+    }
+
+    /// 用外部 proof 组装 VC。
+    fn assemble_vc_with_proof(
+        &self,
+        py: Python<'_>,
+        claims: &Bound<'_, PyAny>,
+        subject_did: String,
+        proof: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        let claims: serde_json::Value = from_py_object(claims)?;
+        let proof: Proof = from_py_object(proof)?;
+        let vc = self
+            .inner
+            .assemble_vc_with_proof(claims, &subject_did, proof)
+            .map_err(to_pyerr)?;
+        to_py_object(py, &vc)
+    }
+
+    /// 校验 VC。
+    fn verify_vc<'py>(
+        &self,
+        py: Python<'py>,
+        vc: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let vc: VerifiableCredential = from_py_object(vc)?;
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let result = inner.verify_vc(&vc).await.map_err(to_pyerr)?;
+            Python::with_gil(|py| to_py_object(py, &result))
+        })
+    }
+
+    fn store_vc<'py>(
+        &self,
+        py: Python<'py>,
+        vc: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let vc: VerifiableCredential = from_py_object(vc)?;
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            inner.store_vc(vc).await.map_err(to_pyerr)
+        })
+    }
+
+    fn get_vc<'py>(&self, py: Python<'py>, anchor_id: String) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let vc = inner.get_vc(&anchor_id).await.map_err(to_pyerr)?;
+            Python::with_gil(|py| match vc {
+                Some(vc) => Ok(to_py_object(py, &vc)?),
+                None => Ok(py.None()),
+            })
+        })
+    }
+
+    fn list_vcs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let vcs = inner.list_vcs().await.map_err(to_pyerr)?;
+            Python::with_gil(|py| to_py_object(py, &vcs))
+        })
+    }
+
+    fn remove_vc<'py>(&self, py: Python<'py>, anchor_id: String) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            inner.remove_vc(&anchor_id).await.map_err(to_pyerr)
+        })
+    }
+
+    fn build_vp<'py>(
+        &self,
+        py: Python<'py>,
+        vcs: &Bound<'py, PyAny>,
+        challenge: String,
+        domain: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let vcs: Vec<VerifiableCredential> = from_py_object(vcs)?;
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let vp = inner
+                .build_vp(vcs, &challenge, &domain)
+                .await
+                .map_err(to_pyerr)?;
+            Python::with_gil(|py| to_py_object(py, &vp))
+        })
+    }
+
+    fn resolve_did(&self, py: Python<'_>, did: String) -> PyResult<Py<PyAny>> {
+        match self.inner.resolve_did(&did).map_err(to_pyerr)? {
+            Some(record) => to_py_object(py, &record),
+            None => Ok(py.None()),
+        }
+    }
+
+    fn get_anchor<'py>(&self, py: Python<'py>, anchor_id: String) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let anchor = inner.get_anchor(&anchor_id).await.map_err(to_pyerr)?;
+            Python::with_gil(|py| to_py_object(py, &anchor))
+        })
+    }
+
+    /// 本地签名器签名（配置 key_vault 时）。
+    #[pyo3(signature = (message, purpose = "", payload_summary = "", requestor = None))]
+    fn sign_with_participant_key<'py>(
+        &self,
+        py: Python<'py>,
+        message: Vec<u8>,
+        purpose: &str,
+        payload_summary: &str,
+        requestor: Option<String>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        let purpose = purpose.to_string();
+        let payload_summary = payload_summary.to_string();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let signature = inner
+                .sign_with_participant_key(
+                    &message,
+                    did_sdk::SigningContext {
+                        purpose,
+                        payload_summary,
+                        requestor,
+                    },
+                )
+                .await
+                .map_err(to_pyerr)?;
+            Python::with_gil(|py| Ok::<_, PyErr>(bytes(py, signature.0)))
+        })
+    }
+
+    /// 本地签名器签发 VC（配置 key_vault 时）。
+    fn issue_self_asserted_vc<'py>(
+        &self,
+        py: Python<'py>,
+        claims: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let claims: serde_json::Value = from_py_object(claims)?;
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let vc = inner.issue_self_asserted_vc(claims).map_err(to_pyerr)?;
+            Python::with_gil(|py| to_py_object(py, &vc))
+        })
+    }
+
+    fn resolved_config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        to_py_object(py, &self.config)
+    }
+}
+
 #[pymodule]
 fn _did_sdk(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<DidSdk>()?;
+    module.add_class::<ServerDidSdk>()?;
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     module.add("DidSdkError", py.get_type::<DidSdkError>())?;
     module.add("UserRejectedError", py.get_type::<UserRejectedError>())?;

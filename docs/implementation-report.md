@@ -63,6 +63,19 @@ DidSdk<Server> ── vault: None ───────────────�
   密钥来自 `DID_SDK_VC_STORAGE_PASSWORD` 或自动生成的 `.vc_password`（0600），
   Client 与 Server 均不写明文。
 
+## 3.2 Client/Server 双产物
+
+- Rust：`did-sdk-client` / `did-sdk-server` 产品 crate。
+- Python：`did-sdk-client` / `did-sdk-server` 两个 wheel（共享 core）。
+- Node：`@did-sdk/client` / `@did-sdk/server` 两个 addon（共享 core）。
+- CI 构建矩阵按 Client/Server 各 5 平台。
+
+### 密钥策略
+
+- Server 默认 `key_vault: Some(FileKeystore)`，开发/测试/试运行可直接签名；
+  `key_vault: None` 或 `key_vault_scheme="none"` 关闭。
+- VC 加密默认复用 KeyVault 密码；无 KeyVault 时回退独立密码/自动 `.vc_password`。
+
 ## 4. GitHub Actions（v2 提交 `52f8555`）
 
 | workflow | run | 结果 |
@@ -84,11 +97,13 @@ aarch64: statically linked, stripped / OK: static / ldd: not a dynamic executabl
 
 ```text
 cargo test -p keyvault-core           # 9 unit + 16 integration = 25 passed
-cargo test -p did-sdk                 # 3 unit + 48 integration = 51 passed, 1 ignored
+cargo test -p did-sdk                 # 3 unit + 50 integration = 53 passed, 1 ignored
 cargo fmt --all -- --check            # passed
-cargo clippy --workspace --all-targets -- -D warnings  # passed
+cargo clippy --workspace --exclude did-sdk-python --exclude did-sdk-python-server --exclude did-sdk-node --exclude did-sdk-node-server --all-targets -- -D warnings  # passed
 pytest bindings/python/tests          # 9 passed
+pytest bindings/python-server/tests   # 1 passed
 npm test (bindings/node)              # 8 passed
+npm test (bindings/node-server)       # 1 passed
 ```
 
 覆盖：

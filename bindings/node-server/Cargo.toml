@@ -1,0 +1,28 @@
+[package]
+name = "did-sdk-node-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+build = "../node/build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+path = "../node/src/lib.rs"
+
+[dependencies]
+did-sdk = { path = "../.." }
+keyvault-core = { path = "../../keyvault-core" }
+napi = { workspace = true }
+napi-derive = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+secrecy = { workspace = true }
+hex = { workspace = true }
+
+[build-dependencies]
+napi-build = "2"
+
+[lints]
+workspace = true

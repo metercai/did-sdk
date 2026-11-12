@@ -82,9 +82,10 @@ impl<M: SdkMode> DidSdk<M> {
         vault: Option<Arc<dyn KeyVault>>,
         participant_did: Option<String>,
         vc_storage_path: std::path::PathBuf,
+        vc_password: Option<secrecy::SecretString>,
     ) -> Result<Self, DidSdkError> {
         Ok(Self {
-            core: SdkCore::new(vc_storage_path)?,
+            core: SdkCore::new(vc_storage_path, vc_password)?,
             backend,
             vault,
             participant_did,

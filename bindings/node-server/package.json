@@ -1,0 +1,30 @@
+{
+  "name": "@did-sdk/server",
+  "version": "0.1.0",
+  "description": "DID SDK Server native Node addon",
+  "license": "Apache-2.0",
+  "main": "wrapper.js",
+  "types": "wrapper.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "wrapper.js",
+    "wrapper.d.ts",
+    "*.node"
+  ],
+  "napi": {
+    "name": "did-sdk-server"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2",
+    "vitest": "^2"
+  }
+}

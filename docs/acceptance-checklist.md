@@ -66,9 +66,9 @@
 | 项 | 状态 | 证据 |
 |---|---|---|
 | Python wheel 构建 | ✅ | 本地 maturin build |
-| Python pytest | ✅ | **9 passed** |
+| Python pytest | ✅ | **10 passed** |
 | Node addon 构建 | ✅ | 本地 napi build |
-| Node vitest | ✅ | **8 passed** |
+| Node vitest | ✅ | **9 passed** |
 | 三语言 golden vector | ✅ | Rust/Python/Node 各自执行 |
 | `.d.ts` 已提交 | ✅ | `bindings/node/index.d.ts` |
 
@@ -77,11 +77,11 @@
 | 套件 | 结果 |
 |---|---|
 | `cargo test -p keyvault-core` | **9 单测 + 16 集成 = 25 passed** |
-| `cargo test -p did-sdk` | **3 单测 + 48 集成 = 51 passed，1 ignored** |
+| `cargo test -p did-sdk` | **3 单测 + 50 集成 = 53 passed，1 ignored** |
 | `cargo fmt --all -- --check` | 通过 |
-| `cargo clippy --workspace --all-targets -- -D warnings` | 通过 |
-| Python `pytest` | **9 passed** |
-| Node `vitest` | **8 passed** |
+| `cargo clippy --workspace --exclude did-sdk-python --exclude did-sdk-python-server --exclude did-sdk-node --exclude did-sdk-node-server --all-targets -- -D warnings` | 通过 |
+| Python `pytest` | **10 passed** |
+| Node `vitest` | **9 passed** |
 
 ## 5.1 本轮新增要求
 
@@ -91,6 +91,19 @@
 | Client VC 存储密文 | ✅ | `client_vc_is_stored_as_ciphertext_and_reloads`（`DVCS` 头，无明文） |
 | Server VC 存储密文 | ✅ | `server_vc_is_stored_as_ciphertext` |
 | VC 加密密钥来源 | ✅ | `DID_SDK_VC_STORAGE_PASSWORD` 或自动生成 `.vc_password`（0600） |
+
+## 5.2 Client/Server 双产物
+
+| 产物 | Client | Server | 状态 |
+|---|---|---|---|
+| Rust crate | `did-sdk-client` | `did-sdk-server` | ✅ |
+| Python wheel | `did-sdk-client` (`did_sdk`) | `did-sdk-server` (`did_sdk_server`) | ✅ 本地构建/测试 |
+| Node addon | `@did-sdk/client` | `@did-sdk/server` | ✅ 本地构建/测试 |
+| CI 矩阵 | 5 平台 | 5 平台 | ⏳ 待本轮推送后重跑 |
+
+Server 默认 `key_vault: Some(FileKeystore)`；`key_vault_scheme="none"` 可关闭本地签名器。
+VC 加密密钥默认复用 KeyVault 密码；无 KeyVault 时回退
+`DID_SDK_VC_STORAGE_PASSWORD` / 自动 `.vc_password`。
 
 ## 6. GitHub Actions（v2 代码提交 `52f8555`）
 

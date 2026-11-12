@@ -9,10 +9,14 @@
 /dist/
 /.venv-vectors/
 /bindings/python/dist/
+/bindings/python-server/dist/
+/bindings/python-server/.venv/
 /bindings/python/.venv/
 /bindings/node/node_modules/
+/bindings/node-server/node_modules/
 /bindings/node/npm/
 /bindings/node/*.node
+/bindings/node-server/*.node
 
 # Python
 **/__pycache__/

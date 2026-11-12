@@ -35,23 +35,33 @@ DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` �
 
 ## 2. 三套产物与安装
 
-| 产物 | 目录 | 构建 | 目标 |
-|---|---|---|---|
-| Rust crate | `./` + `./keyvault-core` | cargo / cargo-zigbuild | Linux musl x64/arm64、macOS arm64、Windows x64 |
-| Python wheel | `./bindings/python` | maturin | manylinux / musllinux / macosx / win_amd64 |
-| Node addon | `./bindings/node` | napi-rs | Linux x64/arm64 gnu+musl、macOS arm64、Windows x64 |
+**Client / Server 两套产物分别编译、分别发布。**
+
+| 产物 | Client | Server |
+|---|---|---|
+| Rust crate | `did-sdk-client`（`crates/did-sdk-client`） | `did-sdk-server`（`crates/did-sdk-server`） |
+| Python wheel | `did-sdk-client`（`bindings/python`） | `did-sdk-server`（`bindings/python-server`） |
+| Node addon | `@did-sdk/client`（`bindings/node`） | `@did-sdk/server`（`bindings/node-server`） |
+| 平台 | Linux musl x64/arm64、macOS arm64、Windows x64 | 同左 |
+
+公共类型/签名/加密逻辑仍在 `did-sdk` core + `keyvault-core`；两套产物只是按模式暴露 API。
 
 ```bash
 # Rust（未发布到 crates.io 前使用 path）
-cargo add did-sdk
+cargo add did-sdk-client      # 客户端
+cargo add did-sdk-server      # 服务端
 
 # Python
-pip install did-sdk
+pip install did-sdk-client    # 客户端
+pip install did-sdk-server    # 服务端
 cd bindings/python && maturin build --release && pip install dist/*.whl
+cd bindings/python-server && maturin build --release && pip install dist/*.whl
 
 # Node
-npm install @did-sdk/node
+npm install @did-sdk/client
+npm install @did-sdk/server
 cd bindings/node && npm ci && npx napi build --platform --release
+cd bindings/node-server && npm install && npx napi build --platform --release
 ```
 
 **本项目不提供浏览器 WASM 版本。**
@@ -114,7 +124,27 @@ let result = sdk.verify_vc(&vc).await?;
 println!("verified={}", result.verified);
 ```
 
-### Python
+### Python Server
+
+```python
+import asyncio
+from did_sdk_server import ServerDidSdk
+
+async def main():
+    sdk = ServerDidSdk(
+        "did:web:issuer.example.com",
+        mode="mock",
+        key_vault_scheme="file-keystore",  # 开发/测试/试运行；生产可设 "none"
+        key_vault_password="dev-password",
+        vc_storage_path="./participant-vc",
+    )
+    vc = await sdk.issue_self_asserted_vc({"name": "Alice"})
+    print(vc["issuer"], vc["proof"]["jws"])
+
+asyncio.run(main())
+```
+
+### Python Client
 
 ```python
 import asyncio
@@ -132,10 +162,25 @@ async def main():
 asyncio.run(main())
 ```
 
-### Node / TypeScript
+### Node Server
 
 ```ts
-import { DidSdk } from "@did-sdk/node";
+import { ServerDidSdk } from "@did-sdk/server";
+
+const sdk = new ServerDidSdk("did:web:issuer.example.com", {
+  mode: "mock",
+  keyVaultScheme: "file-keystore",
+  keyVaultPassword: "dev-password",
+  vcStoragePath: "./participant-vc",
+});
+const vc = await sdk.issueSelfAssertedVc({ name: "Alice" });
+console.log(vc.issuer, vc.proof.jws);
+```
+
+### Node Client
+
+```ts
+import { DidSdk } from "@did-sdk/client";
 
 const sdk = new DidSdk();
 const did = await sdk.generateDidKey();
@@ -215,7 +260,7 @@ endpoint = "ws://127.0.0.1:9944"
 # participant_did = "did:web:issuer.example.com:mail"
 # vc_storage_path = "./participant-vc-store"
 #
-# # 开发/测试/试运行可选；生产环境删除
+# # 默认启用；生产可删除或改为 key_vault_scheme=none
 # [did_sdk.key_vault]
 # scheme = "file-keystore"
 # path = "./participant-keys"
@@ -236,7 +281,7 @@ endpoint = "ws://127.0.0.1:9944"
 | `DID_SDK_CENTRALIZED_ENDPOINT` | Centralized 端点 |
 | `DID_SDK_CHAIN_ENDPOINT` | Chain 端点 |
 | `DID_SDK_CACHE_TTL_SECS` | TTL |
-| `DID_SDK_VC_STORAGE_PASSWORD` | VC 存储加密密码（缺失时自动生成 `.vc_password`，0600） |
+| `DID_SDK_VC_STORAGE_PASSWORD` | 无 KeyVault 时的 VC 加密密码（否则自动生成 `.vc_password`，0600） |
 
 ---
 
@@ -259,8 +304,8 @@ endpoint = "ws://127.0.0.1:9944"
 - `FileKeystore`：Argon2id + ChaCha20-Poly1305，按 namespace 子目录 + `index.json`，原子写。
 - Client 签名前用户确认；Server 生产环境不持签名私钥，开发/测试/试运行可配置本地 `FileKeystore`。
 - 链访问只读；不注入链账户私钥。
-- VC 文件静态加密：`DVCS` 密文 + ChaCha20-Poly1305，密钥由 `DID_SDK_VC_STORAGE_PASSWORD`
-  或自动生成的 `.vc_password`（0600）派生；Client/Server 均不落明文。
+- VC 文件静态加密：`DVCS` 密文 + ChaCha20-Poly1305；默认复用 KeyVault 密码，
+  Server 默认 FileKeystore，无 KeyVault 时回退 `DID_SDK_VC_STORAGE_PASSWORD` / 自动 `.vc_password`（0600）。
 - HTTP 仅 rustls，不引入 OpenSSL/native-tls。
 
 | 目标 | Rust 核心 | Python wheel | Node addon |

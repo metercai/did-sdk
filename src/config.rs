@@ -99,7 +99,7 @@ pub struct ServerConfig {
     pub participant_did: String,
     /// VC 存储目录。
     pub vc_storage_path: PathBuf,
-    /// 可选本地签名器（开发/测试/试运行）；生产环境留空。
+    /// 本地签名器；默认 FileKeystore（开发/测试/试运行）。生产环境可显式置空。
     pub key_vault: Option<KeyVaultConfig>,
     /// 已解析密码（仅 key_vault 为 Some 时）。
     #[serde(skip)]
@@ -119,7 +119,11 @@ impl Default for ServerConfig {
             mode: DidSdkMode::Chain,
             participant_did: String::new(),
             vc_storage_path: home.join("participant-vc-store"),
-            key_vault: None,
+            key_vault: Some(KeyVaultConfig {
+                path: home.join("participant-keys"),
+                password_file: home.join("participant-keyvault.password"),
+                ..KeyVaultConfig::default()
+            }),
             resolved_password: None,
             centralized_endpoint: "http://127.0.0.1:8080".into(),
             chain_endpoint: "ws://127.0.0.1:9944".into(),
@@ -472,6 +476,7 @@ pub fn build_client_sdk_with_backend(
         Some(vault),
         None,
         config.vc_storage_path.clone(),
+        config.resolved_password.clone(),
     )?))
 }
 
@@ -503,21 +508,25 @@ pub fn build_server_sdk_with_backend(
             "server participant_did is required".into(),
         ));
     }
-    let vault = match &config.key_vault {
+    let (vault, vc_password) = match &config.key_vault {
         Some(key_vault) => {
             let password = match &config.resolved_password {
                 Some(password) => password.clone(),
                 None => resolve_keyvault_password(key_vault)?,
             };
-            Some(build_vault_with(key_vault, &password)?)
+            (
+                Some(build_vault_with(key_vault, &password)?),
+                Some(password),
+            )
         }
-        None => None,
+        None => (None, config.resolved_password.clone()),
     };
     Ok(Arc::new(crate::DidSdk::<Server>::new(
         backend,
         vault,
         Some(config.participant_did.clone()),
         config.vc_storage_path.clone(),
+        vc_password,
     )?))
 }
 

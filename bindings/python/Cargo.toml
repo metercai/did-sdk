@@ -17,6 +17,7 @@ pyo3-async-runtimes = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
+secrecy = { workspace = true }
 pythonize = "0.23"
 hex = { workspace = true }
 

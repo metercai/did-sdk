@@ -30,6 +30,7 @@ fn server_config(dir: &Path, participant_did: &str) -> ServerConfig {
     config.mode = DidSdkMode::Mock;
     config.participant_did = participant_did.to_string();
     config.vc_storage_path = dir.join("server-vc");
+    config.key_vault = None;
     config
 }
 

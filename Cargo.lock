@@ -1203,6 +1203,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "did-sdk-client"
+version = "0.1.0"
+dependencies = [
+ "did-sdk",
+]
+
+[[package]]
 name = "did-sdk-node"
 version = "0.1.0"
 dependencies = [
@@ -1212,6 +1219,23 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "did-sdk-node-server"
+version = "0.1.0"
+dependencies = [
+ "did-sdk",
+ "hex",
+ "keyvault-core",
+ "napi",
+ "napi-build",
+ "napi-derive",
+ "secrecy",
  "serde",
  "serde_json",
  "tokio",
@@ -1227,9 +1251,33 @@ dependencies = [
  "pyo3",
  "pyo3-async-runtimes",
  "pythonize",
+ "secrecy",
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "did-sdk-python-server"
+version = "0.1.0"
+dependencies = [
+ "did-sdk",
+ "hex",
+ "keyvault-core",
+ "pyo3",
+ "pyo3-async-runtimes",
+ "pythonize",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "did-sdk-server"
+version = "0.1.0"
+dependencies = [
+ "did-sdk",
 ]
 
 [[package]]

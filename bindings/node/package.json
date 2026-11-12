@@ -1,5 +1,5 @@
 {
-  "name": "@did-sdk/node",
+  "name": "@did-sdk/client",
   "version": "0.1.0",
   "description": "DID SDK native Node addon (Mock/Centralized/Chain modes)",
   "license": "Apache-2.0",
@@ -13,7 +13,7 @@
     "*.node"
   ],
   "napi": {
-    "name": "did-sdk"
+    "name": "did-sdk-client"
   },
   "engines": {
     "node": ">=18"

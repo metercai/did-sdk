@@ -18,6 +18,6 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --locked --workspace --exclude did-sdk-python --exclude did-sdk-node --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --exclude did-sdk-python --exclude did-sdk-python-server --exclude did-sdk-node --exclude did-sdk-node-server --all-targets -- -D warnings
       - name: Test
-        run: cargo test --locked --workspace --exclude did-sdk-python --exclude did-sdk-node
+        run: cargo test --locked --workspace --exclude did-sdk-python --exclude did-sdk-python-server --exclude did-sdk-node --exclude did-sdk-node-server

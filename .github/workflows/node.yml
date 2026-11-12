@@ -11,7 +11,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
+        variant:
+          - name: client
+            binding: bindings/node
+            install: npm ci
+          - name: server
+            binding: bindings/node-server
+            install: npm install
+        target:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
           - target: x86_64-unknown-linux-musl
@@ -22,7 +29,7 @@ jobs:
             os: macos-15
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.target.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,16 +40,16 @@ jobs:
         uses: goto-bus-stop/setup-zig@v2
         with:
           version: 0.13.0
-      - run: cd bindings/node && npm ci
+      - run: cd ${{ matrix.variant.binding }} && ${{ matrix.variant.install }}
       - name: Build addon
         shell: bash
         run: |
           if [[ "${{ matrix.target }}" == *musl* ]]; then
-            cd bindings/node && npx napi build --platform --release --target ${{ matrix.target }} --zig
+            cd ${{ matrix.variant.binding }} && npx napi build --platform --release --target ${{ matrix.target.target }} --zig
           else
-            cd bindings/node && npx napi build --platform --release --target ${{ matrix.target }}
+            cd ${{ matrix.variant.binding }} && npx napi build --platform --release --target ${{ matrix.target.target }}
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: addons-${{ matrix.target }}
-          path: bindings/node/*.node
+          name: addons-${{ matrix.variant.name }}-${{ matrix.target.target }}
+          path: ${{ matrix.variant.binding }}/*.node

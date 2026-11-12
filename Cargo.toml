@@ -11,7 +11,7 @@ readme = "README.md"
 [workspace]
 # resolver = "3" 启用 MSRV 感知解析。详见 docs/implementation-plan.md 决策 D-01。
 resolver = "3"
-members = [".", "keyvault-core", "bindings/python", "bindings/node"]
+members = [".", "keyvault-core", "bindings/python", "bindings/python-server", "bindings/node", "bindings/node-server", "crates/did-sdk-client", "crates/did-sdk-server"]
 default-members = [".", "keyvault-core"]
 
 [workspace.package]
