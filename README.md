@@ -10,8 +10,9 @@ DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` �
 × **Mock / Centralized 两种后端** × **did:key / did:peer / did:web 三种 DID 方法**。
 
 > **当前状态：已按更新版规格重构；首个版本 [`v0.1.0`](https://github.com/metercai/did-sdk/releases/tag/v0.1.0) 已发布。**
+> 选择性披露（SD-JWT）已在 `main` 实现，尚未包含在 `v0.1.0` 资产中。
 > - 规格：[`01-DidSdk接口契约与实现规格书1.md`](docs/01-DidSdk接口契约与实现规格书1.md) / [`04-keyvault-core_crate规格书1.md`](docs/04-keyvault-core_crate规格书1.md)
-> - 选择性披露：[`docs/VC选择性披露特性补充附件.md`](docs/VC选择性披露特性补充附件.md)
+> - 选择性披露：[`docs/VC选择性披露特性补充附件.md`](docs/VC选择性披露特性补充附件.md) / [互操作约定](docs/selective-disclosure-interop.md)
 > - R1 修订：[`docs/did-sdk移除链上查询与subxt依赖的修订.md`](docs/did-sdk移除链上查询与subxt依赖的修订.md)
 > - 实施/迁移说明：[`docs/implementation-report.md`](docs/implementation-report.md)
 > - 验收清单：[`docs/acceptance-checklist.md`](docs/acceptance-checklist.md)

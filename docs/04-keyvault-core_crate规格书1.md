@@ -3,7 +3,7 @@
 
 > **同步状态（2026-11-12）**：本文档与当前代码同步。已实现三 namespace
 > （`chain-account/`、`participant-did/`、`client-did/`）、Ed25519/Sr25519、
-> SS58、FileKeystore v2（`.enc` + index v2）、`sign_checked`、`sd` 盐化哈希工具与 8 个签名输入。
+> SS58、FileKeystore v2（`.enc` + index v2）、`sign_checked`、`sd` 盐化哈希工具与 9 个签名输入（含 vp_v1 / vp_sd_v1）。
 > 详见 `docs/implementation-report.md` 与 `docs/acceptance-checklist.md`。
 
 ## 0. 定位与设计原则
@@ -473,7 +473,7 @@ pub mod sd {
 3. `KeyNamespace` / `KeyAlgorithm` / `KeyId` 定义；
 4. `FileKeystore` 实现（含 namespace 子目录、加密文件格式、解锁校验）；
 5. 密码学原语模块（含 SS58 转换）；
-6. 签名对象构造模块（8 个构造函数）+ `sd` 盐化哈希工具；
+6. 签名对象构造模块（9 个构造函数）+ `sd` 盐化哈希工具；
 7. 配置文件示例（三种密码管理方式）；
 8. 单元测试（生成、加载、签名、错误密码、密钥不存在、namespace 隔离、跨 namespace 拒绝）；
 9. 验收记录（K1–K13）。

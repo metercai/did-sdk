@@ -26,7 +26,7 @@
 | K5 | 私钥不出 KeyVault | ✅ | 代码审查；`Keypair` 不 Serialize/Clone/Debug |
 | K6 | 环境变量 / 文件 / 交互输入 | ✅ | `password_sources`；`PasswordSource::Prompt` |
 | K7 | did:key + SS58 原语 | ✅ | `ss58_roundtrip_and_checksum`、`did_key_roundtrip...` |
-| K8 | 8 个签名对象构造函数（含 vp_sd_v1） | ✅ | `signing_input` 单测 + `tests/vectors` + 三语言绑定 |
+| K8 | 9 个签名对象构造函数（含 vp_v1 / vp_sd_v1） | ✅ | `signing_input` 单测 + `tests/vectors` + 三语言绑定 |
 | K9 | 跨 crate 共享 | ✅ | did-sdk / Python / Node 均调用 keyvault-core |
 | K10 | namespace 强制隔离 + 文件头/index 一致 | ✅ | `rejects_invalid_namespace_algorithm_combination`、`index_algorithm_mismatch_is_rejected` |
 | K11 | `sign_checked` 拒绝跨 namespace / algorithm | ✅ | `sign_checked_enforces_namespace_and_algorithm` |
@@ -60,7 +60,7 @@
 
 | 编号 | 验收项 | 状态 | 证据 |
 |---|---|---|---|
-| S1 | Linux musl 完全静态 | ✅ | `rust-musl` [43229893304](https://github.com/metercai/did-sdk/actions/runs/43229893304)；x86_64/aarch64 `statically linked` + `ldd: not a dynamic executable` |
+| S1 | Linux musl 完全静态 | ✅ | `rust-musl` [43268561636](https://github.com/metercai/did-sdk/actions/runs/43268561636)；x86_64/aarch64 `statically linked` + `ldd: not a dynamic executable` |
 | S2 | `UserRejected` 三语言透传 | ✅ | Rust 测试 + Python/Node 映射代码 |
 | S3 | 双产物构建矩阵 | ✅ | Rust 4/4、Python 10/10（client+server）、Node 10/10（client+server） |
 
@@ -129,15 +129,15 @@ VC 加密密钥默认复用 KeyVault 密码；无 KeyVault 时回退
 
 测试：`tests/selective_disclosure.rs`；Python `test_selective_disclosure.py` / `test_server.py`；Node `vectors.test.ts`。
 
-## 6. GitHub Actions（R1 代码提交 `adf83ee`）
+## 6. GitHub Actions（SD-JWT 代码提交 `ffd59fd`）
 
 | workflow | run | 结果 |
 |---|---|---|
-| `ci` | [43229893389](https://github.com/metercai/did-sdk/actions/runs/43229893389) | success |
-| `rust-musl` | [43229893304](https://github.com/metercai/did-sdk/actions/runs/43229893304) | 4/4 success |
-| `python` | [43229893563](https://github.com/metercai/did-sdk/actions/runs/43229893563) | 10/10 success |
-| `node` | [43229893408](https://github.com/metercai/did-sdk/actions/runs/43229893408) | 10/10 success |
-| `cross-lang` | [43229893279](https://github.com/metercai/did-sdk/actions/runs/43229893279) | success |
+| `ci` | [43268561991](https://github.com/metercai/did-sdk/actions/runs/43268561991) | success |
+| `rust-musl` | [43268561636](https://github.com/metercai/did-sdk/actions/runs/43268561636) | 4/4 success |
+| `python` | [43268561958](https://github.com/metercai/did-sdk/actions/runs/43268561958) | 10/10 success |
+| `node` | [43268561892](https://github.com/metercai/did-sdk/actions/runs/43268561892) | 10/10 success |
+| `cross-lang` | [43268561597](https://github.com/metercai/did-sdk/actions/runs/43268561597) | success |
 
 ## 6.1 首个 Release
 

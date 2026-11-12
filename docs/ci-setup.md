@@ -1,6 +1,6 @@
 # GitHub Actions 接入说明
 
-> **状态：已接入（2026-11-12）。** 最新代码提交 `adf83ee` 的 5 个 workflow 全绿；首个 Release `v0.1.0` 已由 release workflow 产出（run `43245495138`）。
+> **状态：已接入（2026-11-12）。** 最新代码提交 `ffd59fd` 的 5 个 workflow 全绿；首个 Release `v0.1.0` 已由 release workflow 产出（run `43245495138`）。
 > 运行记录见 [`docs/acceptance-checklist.md`](acceptance-checklist.md) 与 GitHub Actions。
 
 本文档说明如何把本地 `did-sdk` 仓库接入 `metercai/did-sdk`，以及如何验证

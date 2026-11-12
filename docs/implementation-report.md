@@ -1,12 +1,12 @@
-# did-sdk 实施报告（v2 + R1）
+# did-sdk 实施报告（v2 + R1 + SD-JWT）
 
 | 项目 | 内容 |
 |---|---|
-| 日期 | 2026-11-12 |
+| 日期 | 2026-11-13 |
 | 规格 | `docs/01-DidSdk接口契约与实现规格书1.md`、`docs/04-keyvault-core_crate规格书1.md` |
-| 修订 | `docs/did-sdk移除链上查询与subxt依赖的修订.md`（R1） |
-| 范围 | Client/Server 双产物、Mock/Centralized 两后端、三种 DID 方法、VC 钱包、Server 本地签名器、VC 密文存储 |
-| 结论 | 代码与本地测试完成；GitHub Actions 需在推送后重跑 |
+| 修订 | `docs/did-sdk移除链上查询与subxt依赖的修订.md`（R1）；`docs/VC选择性披露特性补充附件.md`（SD-JWT） |
+| 范围 | Client/Server 双产物、Mock/Centralized 两后端、三种 DID 方法、VC 钱包、Server 本地签名器、VC 密文存储、SD-JWT 选择性披露 |
+| 结论 | 代码与本地测试完成；GitHub Actions 全绿（`ffd59fd`） |
 
 ---
 
@@ -43,7 +43,7 @@ DidSdk<Server> ── vault: 可选 FileKeystore(participant-did/) ── 外部
 - `KeyNamespace`（ChainAccount / ParticipantDid / ClientDid）× `KeyAlgorithm`（Ed25519 / Sr25519）。
 - `KeyVault::{generate, list_keys, sign_checked}`；跨 namespace/algorithm 拒绝。
 - `FileKeystore` v2：namespace 子目录 + `.enc` + index v2 + 文件头 namespace/algorithm。
-- SS58、8 个签名输入（含 vp_sd_v1）、Argon2id + ChaCha20-Poly1305。
+- SS58、9 个签名输入（含 vp_v1 / vp_sd_v1）、Argon2id + ChaCha20-Poly1305。
 
 ## 4. Client / Server 双产物
 
@@ -89,11 +89,11 @@ cargo tree -p did-sdk | grep subxt    # 无输出
 
 | workflow | run | 结果 |
 |---|---|---|
-| `ci` | [43229893389](https://github.com/metercai/did-sdk/actions/runs/43229893389) | success |
-| `rust-musl` | [43229893304](https://github.com/metercai/did-sdk/actions/runs/43229893304) | 4/4 success |
-| `python` | [43229893563](https://github.com/metercai/did-sdk/actions/runs/43229893563) | 10/10 success |
-| `node` | [43229893408](https://github.com/metercai/did-sdk/actions/runs/43229893408) | 10/10 success |
-| `cross-lang` | [43229893279](https://github.com/metercai/did-sdk/actions/runs/43229893279) | success |
+| `ci` | [43268561991](https://github.com/metercai/did-sdk/actions/runs/43268561991) | success |
+| `rust-musl` | [43268561636](https://github.com/metercai/did-sdk/actions/runs/43268561636) | 4/4 success |
+| `python` | [43268561958](https://github.com/metercai/did-sdk/actions/runs/43268561958) | 10/10 success |
+| `node` | [43268561892](https://github.com/metercai/did-sdk/actions/runs/43268561892) | 10/10 success |
+| `cross-lang` | [43268561597](https://github.com/metercai/did-sdk/actions/runs/43268561597) | success |
 
 ## 7.1 首个 Release
 
@@ -101,6 +101,7 @@ cargo tree -p did-sdk | grep subxt    # 无输出
 - run：[43245495138](https://github.com/metercai/did-sdk/actions/runs/43245495138)
 - 资产：10 个 wheel、2 个 npm tarball（各含 5 平台 `.node`）、4 个 Rust CLI、`SHA256SUMS`。
 - 已验证：发布 wheel 可 import 并完成 Client/Server 签名；npm tarball 可安装并完成同样流程。
+- 注意：`v0.1.0` 资产**不包含** SD-JWT 选择性披露；该能力在 `main`（`ffd59fd`）实现，待下一版本发布。
 
 ## 8. 待外部条件
 
