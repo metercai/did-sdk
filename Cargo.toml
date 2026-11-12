@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 license = "Apache-2.0"
-description = "DID SDK: Rust core (musl-static) + Python + Node bindings; Mock/Centralized/Chain modes"
+description = "DID SDK: Rust core (musl-static) + Python + Node bindings; Mock/Centralized modes"
 repository = "https://github.com/metercai/did-sdk"
 readme = "README.md"
 

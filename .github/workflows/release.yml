@@ -1,0 +1,212 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  python:
+    name: wheel (${{ matrix.variant.name }}, ${{ matrix.target.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - name: client
+            binding: bindings/python
+          - name: server
+            binding: bindings/python-server
+        target:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            maturin_args: --release --out dist -i python3.12
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            maturin_args: --release --out dist -i python3.12
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            maturin_args: --release --out dist -i python3.12
+          - target: aarch64-apple-darwin
+            os: macos-15
+            maturin_args: --release --out dist
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            maturin_args: --release --out dist
+    runs-on: ${{ matrix.target.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: messense/maturin-action@v1
+        with:
+          target: ${{ matrix.target.target }}
+          working-directory: ${{ matrix.variant.binding }}
+          args: ${{ matrix.target.maturin_args }}
+          manylinux: auto
+      - uses: actions/upload-artifact@v4
+        with:
+          name: py-${{ matrix.variant.name }}-${{ matrix.target.target }}
+          path: ${{ matrix.variant.binding }}/dist/*.whl
+
+  node:
+    name: addon (${{ matrix.variant.name }}, ${{ matrix.target.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - name: client
+            binding: bindings/node
+            install: npm ci
+          - name: server
+            binding: bindings/node-server
+            install: npm install
+        target:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-apple-darwin
+            os: macos-15
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.target.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install zig (musl cross)
+        if: contains(matrix.target.target, 'musl')
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+      - run: cd ${{ matrix.variant.binding }} && ${{ matrix.variant.install }}
+      - name: Build addon
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target.target }}" == *musl* ]]; then
+            cd ${{ matrix.variant.binding }} && npx napi build --platform --release --target ${{ matrix.target.target }} --zig
+          else
+            cd ${{ matrix.variant.binding }} && npx napi build --platform --release --target ${{ matrix.target.target }}
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-${{ matrix.variant.name }}-${{ matrix.target.target }}
+          path: ${{ matrix.variant.binding }}/*.node
+
+  rust:
+    name: rust-cli (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-apple-darwin
+            os: macos-15
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+      - name: Install zig
+        if: contains(matrix.target, 'musl')
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+      - name: Install zigbuild
+        if: contains(matrix.target, 'musl')
+        run: cargo install cargo-zigbuild --locked
+      - name: Build static CLI
+        shell: bash
+        run: |
+          mkdir -p release-bin
+          if [[ "${{ matrix.target }}" == *musl* ]]; then
+            cargo zigbuild --locked --target ${{ matrix.target }} --release \
+              -p did-sdk -p did-sdk-client -p did-sdk-server -p keyvault-core --example mini_cli
+          else
+            cargo build --locked --target ${{ matrix.target }} --release \
+              -p did-sdk -p did-sdk-client -p did-sdk-server -p keyvault-core --example mini_cli
+          fi
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            cp target/${{ matrix.target }}/release/examples/mini_cli.exe release-bin/mini-cli-${{ matrix.target }}.exe
+          else
+            cp target/${{ matrix.target }}/release/examples/mini_cli release-bin/mini-cli-${{ matrix.target }}
+          fi
+      - name: Verify static (musl only)
+        if: contains(matrix.target, 'musl')
+        shell: bash
+        run: |
+          BIN="release-bin/mini-cli-${{ matrix.target }}"
+          file "$BIN"
+          file "$BIN" | grep -qE 'statically linked|static-pie linked'
+          ldd "$BIN" 2>&1 | grep -E 'not a dynamic executable|not found' || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-${{ matrix.target }}
+          path: release-bin/*
+
+  publish:
+    name: GitHub Release
+    needs: [python, node, rust]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: py-*
+          merge-multiple: true
+          path: release/python
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: node-*
+          merge-multiple: true
+          path: release/node
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rust-*
+          merge-multiple: true
+          path: release/rust
+      - name: Pack Python and npm artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release/npm/client release/npm/server
+          cp bindings/node/package.json bindings/node/index.js bindings/node/index.d.ts \
+             bindings/node/wrapper.js bindings/node/wrapper.d.ts release/npm/client/
+          cp bindings/node-server/package.json bindings/node-server/index.js bindings/node-server/index.d.ts \
+             bindings/node-server/wrapper.js bindings/node-server/wrapper.d.ts release/npm/server/
+          cp release/node/did-sdk-client.*.node release/npm/client/
+          cp release/node/did-sdk-server.*.node release/npm/server/
+          ( cd release/npm/client && npm pack --pack-destination .. )
+          ( cd release/npm/server && npm pack --pack-destination .. )
+          rm -rf release/npm/client release/npm/server
+          ( cd release && find python npm rust -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS )
+          ls -lR release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: did-sdk v0.1.0
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            release/python/*.whl
+            release/npm/*.tgz
+            release/rust/*
+            release/SHA256SUMS
+          fail_on_unmatched_files: true
