@@ -1,6 +1,6 @@
 # did-sdk 验收清单
 
-> 状态：实现与本地测试完成（2026-11-12）；跨平台 CI 与真实链接入待外部条件。
+> 状态：实现、本地测试与 GitHub Actions 跨平台构建完成（2026-11-12）；真实链接入待外部条件。
 > 每个阶段完成后更新本文件，记录**命令 + 输出摘要**；不允许只打勾不记录证据。
 >
 > 关联文档：[`docs/implementation-plan.md`](implementation-plan.md) ·
@@ -50,9 +50,9 @@
 
 | 编号 | 验收项 | 状态 | 验证命令 | 证据摘要 |
 |---|---|---|---|---|
-| S1 | Linux musl 完全静态、零运行时依赖 | ⏳ CI | GitHub Actions `rust-musl.yml` | 按评审结论由 CI runner 验证；本地不做交叉编译 |
+| S1 | Linux musl 完全静态、零运行时依赖 | ✅ | GitHub Actions `rust-musl.yml` run `43167051258` | x86_64/aarch64 均 `statically linked`；`ldd` → `not a dynamic executable` |
 | S2 | `UserRejected` 三语言透传 | ✅ | Rust `user_rejected.rs`；绑定错误映射代码 | Rust 三来源测试全绿；Python `UserRejectedError` / Node `err.code` 映射已实现（当前 Mock 工厂不暴露 AutoReject，触发路径留给未来设备安全区） |
-| S3 | 四平台构建矩阵 | ⏳ CI | GitHub Actions | 需先创建/推送 `metercai/did-sdk` 并启用 Actions |
+| S3 | 四平台构建矩阵 | ✅ | GitHub Actions `rust-musl.yml` run `43167051258` | 4/4 success；Python 5/5、Node 5/5、CI、cross-lang 全绿 |
 
 ## 4. 绑定
 
@@ -64,7 +64,7 @@
 | Node vitest（golden vector + `err.code`） | ✅ | `npm test` | **6 passed** |
 | `.d.ts` 已提交 | ✅ | `bindings/node/index.d.ts` | napi 生成并提交 |
 | 三语言向量一致 | ✅ | `bash scripts/cross-lang-vectors.sh` | 脚本退出码 0；Rust/Python/Node 全绿 |
-| 跨平台构建（CI） | ⏳ | GitHub Actions | 待远程仓库 |
+| 跨平台构建（CI） | ✅ | GitHub Actions | Python `43167051243` 5/5；Node `43167051089` 5/5 |
 
 ## 5. 文档
 
@@ -79,11 +79,20 @@
 | CI 接入 runbook | ✅ | [`docs/ci-setup.md`](ci-setup.md) |
 | Shell 脚本语法 | ✅ | `bash -n scripts/*.sh` 全部通过 |
 
-## 6. 已知未验证项（需外部条件）
+## 6. GitHub Actions 证据
+
+| workflow | run | 结果 |
+|---|---|---|
+| `ci` | [`43167051240`](https://github.com/metercai/did-sdk/actions/runs/43167051240) | success |
+| `rust-musl` | [`43167051258`](https://github.com/metercai/did-sdk/actions/runs/43167051258) | 4/4 success |
+| `python` | [`43167051243`](https://github.com/metercai/did-sdk/actions/runs/43167051243) | 5/5 success |
+| `node` | [`43167051089`](https://github.com/metercai/did-sdk/actions/runs/43167051089) | 5/5 success |
+| `cross-lang` | [`43167051352`](https://github.com/metercai/did-sdk/actions/runs/43167051352) | success |
+
+## 7. 已知未验证项（需外部条件）
 
 | 项 | 原因 | 解除条件 |
 |---|---|---|
-| S1 / S3 跨平台 CI | 仓库尚未创建（API 404）；本地无 GitHub 凭据 | 用户创建 `metercai/did-sdk` 并推送；或提供可用 token / 已授权 SSH key |
 | D7 真实链接入 | 无 identity-chain 节点与 pallet 元数据 | 提供节点 + `DID_SDK_CHAIN_ENDPOINT` + pallet/storage 名称后跑 `#[ignore]` 测试 |
 | crates.io / PyPI / npm 发布 | 无凭据、包名所有权未确认 | 另立发布任务 |
 | npm 依赖审计告警 | devDependencies（vitest 等）传递依赖 | 发布前执行 `npm audit` 评估；不影响 addon 运行时 |

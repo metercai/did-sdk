@@ -4,8 +4,8 @@
 |---|---|
 | 日期 | 2026-11-12 |
 | 计划版本 | `docs/implementation-plan.md` v0.1（已批准） |
-| 范围 | P0–P6 本地可执行部分 |
-| 结论 | Rust 核心、keyvault-core、Python/Node 绑定、golden vector、本地构建与测试完成；跨平台 CI 与真实链验证待外部条件 |
+| 范围 | P0–P6（本地 + GitHub Actions） |
+| 结论 | P0–P6 完成：Rust 核心、keyvault-core、Python/Node 绑定、golden vector、四/五平台 CI 全绿；真实链与发布待外部条件 |
 
 ---
 
@@ -19,7 +19,7 @@
 | P3 | ✅（本地） | `examples/mini_cli` 原生 release 构建并运行；musl/Windows 交给 CI |
 | P4 | ✅ | PyO3 绑定（异步 API、异常、纯函数、`resolved_config`、`.pyi`）；maturin wheel；pytest 7 项 |
 | P5 | ✅ | napi-rs 绑定（异步 API、Buffer、错误码 wrapper、`.d.ts`）；vitest 6 项 |
-| P6 | ⏳（部分） | CI workflows、README、验收清单、跨语言脚本已完成；GitHub 远程/CI 待推送 |
+| P6 | ✅ | CI workflows、README、验收清单、跨语言脚本已完成；GitHub Actions 全绿 |
 
 ---
 
@@ -89,7 +89,26 @@ bash -n scripts/*.sh                        # 全部通过
 python -c 'yaml.safe_load(...)'             # 5 个 workflow YAML 可解析
 ```
 
-### 2.6 原生可执行
+### 2.6 GitHub Actions（代码提交 `64945e3`）
+
+| workflow | run | 结果 |
+|---|---|---|
+| `ci` | [`43167051240`](https://github.com/metercai/did-sdk/actions/runs/43167051240) | success |
+| `rust-musl` | [`43167051258`](https://github.com/metercai/did-sdk/actions/runs/43167051258) | 4/4 success |
+| `python` | [`43167051243`](https://github.com/metercai/did-sdk/actions/runs/43167051243) | 5/5 success |
+| `node` | [`43167051089`](https://github.com/metercai/did-sdk/actions/runs/43167051089) | 5/5 success |
+| `cross-lang` | [`43167051352`](https://github.com/metercai/did-sdk/actions/runs/43167051352) | success |
+
+musl 静态证据：
+
+```text
+x86_64:  ELF 64-bit LSB executable, x86-64, statically linked, stripped
+         OK: static / ldd: not a dynamic executable
+aarch64: ELF 64-bit LSB executable, ARM aarch64, statically linked, stripped
+         OK: static / ldd: not a dynamic executable
+```
+
+### 2.7 原生可执行
 
 ```bash
 cargo build --release --example mini_cli
@@ -151,12 +170,11 @@ DID_SDK_HOME=$PWD/.local-home ./target/release/examples/mini_cli
 
 ## 5. 未完成 / 外部依赖
 
-1. **GitHub 远程仓库**：已配置 `origin = git@github.com:metercai/did-sdk.git`，但 GitHub API 返回 404（仓库尚未创建）；环境无 `gh`、无 GitHub token、SSH key 未被授权。
-   因此尚未推送，S1/S3 的 GitHub Actions 尚未实跑。
-2. **真实 identity-chain**：无节点与 pallet 元数据；D7 仅完成代码路径与
+1. **真实 identity-chain**：无节点与 pallet 元数据；D7 仅完成代码路径与
    `#[ignore]` 测试入口。
-3. **发布**：crates.io / PyPI / npm 未发布；需要凭据与包名所有权确认。
-4. **musl 静态 / Windows**：本地未安装 zig，按评审结论由 CI runner 验证。
+2. **发布**：crates.io / PyPI / npm 未发布；需要凭据与包名所有权确认。
+3. **npm 依赖审计**：devDependencies（vitest 等）存在传递漏洞；发布前评估。
+4. **真实链手动验收**：按 `docs/ci-setup.md` §5 提供节点后运行。
 
 ---
 
