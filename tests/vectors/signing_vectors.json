@@ -1,0 +1,17 @@
+{
+  "$schema_note": "签名对象构造的唯一事实源。P1 阶段由 Rust 参考实现填充 fixed_seed_signature。",
+  "did_signature_v1": [
+    {
+      "input": {
+        "did": "did:key:z6MkExample",
+        "from": "alice@example.com",
+        "timestamp": 1700000000,
+        "anchor_ref": "anchor:abc",
+        "body_hash": "blake2b:1111",
+        "rcpt_hash": "blake2b:2222"
+      },
+      "expected_bytes_utf8": "DID-Signature-v1\ndid:key:z6MkExample\nalice@example.com\n1700000000\nanchor:abc\nblake2b:1111\nblake2b:2222"
+    }
+  ],
+  "fixed_seed_signature": []
+}

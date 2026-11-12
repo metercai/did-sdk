@@ -1,0 +1,54 @@
+name: rust-musl
+on: [push, pull_request]
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-apple-darwin
+            os: macos-14
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Install zigbuild
+        if: contains(matrix.target, 'musl')
+        run: cargo install cargo-zigbuild --locked
+      - name: Build core + example
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target }}" == *musl* ]]; then
+            cargo zigbuild --locked --target ${{ matrix.target }} --release \
+              -p did-sdk -p keyvault-core --example mini_cli
+          else
+            cargo build --locked --target ${{ matrix.target }} --release \
+              -p did-sdk -p keyvault-core --example mini_cli
+          fi
+      - name: Verify static (musl only)
+        if: contains(matrix.target, 'musl')
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/examples/mini_cli"
+          file "$BIN"
+          if file "$BIN" | grep -q 'statically linked'; then
+            echo "OK: static"
+          else
+            echo "FAIL: not static"
+            exit 1
+          fi
+          ldd "$BIN" 2>&1 | grep -E 'not a dynamic executable|not found' || true

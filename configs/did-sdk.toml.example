@@ -1,0 +1,19 @@
+# did-sdk 配置示例（可选，非必需）
+#
+# 全部字段都有内置默认值。只有在显式设置 DID_SDK_CONFIG_FILE，
+# 或默认路径 {DID_SDK_HOME}/did-sdk.toml 存在时才会读取本文件。
+#
+# 优先级：显式 overrides > 环境变量 > 本文件 > 内置默认值。
+
+mode = "mock"
+cache_ttl_secs = 600
+
+# 需要显式覆盖时取消注释；省略的键保持默认值。
+# vc_storage_path = "/var/lib/did-sdk/vc_store"
+# centralized_endpoint = "http://127.0.0.1:8080"
+# chain_endpoint = "ws://127.0.0.1:9944"
+
+[key_vault]
+scheme = "file-keystore"
+# path / password_env / password_file / allow_auto_generate_password
+# 留空时使用默认值。

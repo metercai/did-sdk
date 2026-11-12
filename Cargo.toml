@@ -1,0 +1,113 @@
+[package]
+name = "did-sdk"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+description = "DID SDK: Rust core (musl-static) + Python + Node bindings; Mock/Centralized/Chain modes"
+repository = "https://github.com/metercai/did-sdk"
+readme = "README.md"
+
+[workspace]
+# resolver = "3" 启用 MSRV 感知解析。详见 docs/implementation-plan.md 决策 D-01。
+resolver = "3"
+members = [".", "keyvault-core", "bindings/python", "bindings/node"]
+default-members = [".", "keyvault-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+repository = "https://github.com/metercai/did-sdk"
+
+[workspace.dependencies]
+keyvault-core = { path = "keyvault-core", version = "0.1.0" }
+
+async-trait = "0.1.91"
+async-lock = "3"
+futures = "0.3"
+
+ed25519-dalek = { version = "3.0", default-features = false, features = ["fast", "zeroize"] }
+schnorrkel = "0.11"
+chacha20poly1305 = "0.10"
+argon2 = "0.5"
+blake2 = "0.10"
+multibase = "0.9"
+bs58 = "0.5"
+zeroize = { version = "1.8", features = ["derive"] }
+secrecy = "0.10"
+# ed25519-dalek 3.x / getrandom 0.4 是当前唯一互相兼容的熵源组合：
+# rand 0.8 的 OsRng 实现的是 rand_core 0.6 trait，无法传给 dalek 3.x。
+getrandom = "0.4"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+
+tokio = { version = "1.44", features = ["rt-multi-thread", "macros", "sync", "fs", "time"] }
+# 关键：musl 静态下必须用 rustls（纯 Rust TLS），不能拉 OpenSSL/native-tls。
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+subxt = "0.50"
+dirs = "6"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+wiremock = "0.6"
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1"
+serial_test = "3"
+
+pyo3 = { version = "0.23", features = ["extension-module"] }
+pyo3-async-runtimes = { version = "0.23", features = ["tokio-runtime"] }
+napi = { version = "2", features = ["tokio_rt", "napi9", "serde-json"] }
+napi-derive = "2"
+
+[dependencies]
+keyvault-core = { workspace = true }
+async-trait = { workspace = true }
+async-lock = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+ed25519-dalek = { workspace = true }
+multibase = { workspace = true }
+bs58 = { workspace = true }
+secrecy = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+subxt = { workspace = true }
+dirs = { workspace = true }
+
+[dev-dependencies]
+wiremock = { workspace = true }
+tempfile = { workspace = true }
+serial_test = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+
+[features]
+# 预留：未来 keyvault-device / keyvault-server 通过 feature 门控引入。
+# 默认不开启，避免把平台安全区依赖拖进默认构建。
+device-keystore = []
+server-keystore = []
+
+[[example]]
+name = "mini_cli"
+path = "examples/mini_cli.rs"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+
+[lints]
+workspace = true

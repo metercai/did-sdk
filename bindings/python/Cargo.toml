@@ -1,0 +1,21 @@
+[package]
+name = "did-sdk-python"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "_did_sdk"
+crate-type = ["cdylib"]
+
+[dependencies]
+did-sdk = { path = "../.." }
+keyvault-core = { path = "../../keyvault-core" }
+pyo3 = { workspace = true }
+pyo3-async-runtimes = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,35 @@
+[package]
+name = "keyvault-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "KeyVault trait; FileKeystore + MemoryKeystore implementations"
+
+[dependencies]
+async-trait = { workspace = true }
+async-lock = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+ed25519-dalek = { workspace = true }
+schnorrkel = { workspace = true }
+chacha20poly1305 = { workspace = true }
+argon2 = { workspace = true }
+blake2 = { workspace = true }
+multibase = { workspace = true }
+bs58 = { workspace = true }
+zeroize = { workspace = true }
+secrecy = { workspace = true }
+getrandom = { workspace = true }
+tokio = { workspace = true, features = ["fs", "sync"] }
+dirs = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+proptest = { workspace = true }
+criterion = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,23 @@
+[package]
+name = "did-sdk-node"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+did-sdk = { path = "../.." }
+keyvault-core = { path = "../../keyvault-core" }
+napi = { workspace = true }
+napi-derive = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+serde_json = { workspace = true }
+
+[build-dependencies]
+napi-build = "2"
+
+[lints]
+workspace = true

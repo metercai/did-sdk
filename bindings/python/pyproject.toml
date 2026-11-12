@@ -1,0 +1,18 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "did-sdk"
+version = "0.1.0"
+description = "DID SDK: Rust core + Python bindings (Mock/Centralized/Chain modes)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+dependencies = []
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "did_sdk._did_sdk"
+python-source = "python"
+strip = true

@@ -1,0 +1,28 @@
+{
+  "name": "@did-sdk/node",
+  "version": "0.1.0",
+  "description": "DID SDK native Node addon (Mock/Centralized/Chain modes)",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "*.node"
+  ],
+  "napi": {
+    "name": "did-sdk"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2",
+    "vitest": "^2"
+  }
+}
