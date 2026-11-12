@@ -697,16 +697,15 @@ VP-SD-v1
 4. `@did-sdk/client` / `@did-sdk/server` Node addon；
 5. `keyvault-core`（namespace、SS58、FileKeystore v2、SD 工具、9 个签名输入）；
 6. 测试套件（D1–D18、I/D/V/P、三语言向量）；
-7. 文档：本规格、`04-keyvault-core_crate规格书1.md`、SD 附件与互操作约定。
+7. 文档：本规格、`04-keyvault-core_crate规格书.md`、`selective-disclosure-interop.md`。
 
 ## 13. 与其它文档的关系
 
 | 文档 | 关系 |
 |---|---|
-| `04-keyvault-core_crate规格书1.md` | 密钥、namespace、SS58、SD 哈希工具 |
+| `04-keyvault-core_crate规格书.md` | 密钥、namespace、SS58、SD 哈希工具 |
 | 《ChainSdk 规格书》 | `chain-sdk` 装配 Server 模式，承担锚定查询/写链 |
 | 《ChainOwnerSdk 规格书》 | 装配 Server 模式用于持有侧 VC 与 DID 解析 |
-| 《VC 选择性披露特性补充附件》 | SD-JWT 设计与隐私边界 |
 | `docs/selective-disclosure-interop.md` | 与 chain-sdk 的字节级约定 |
 
 ## 14. 实现同步

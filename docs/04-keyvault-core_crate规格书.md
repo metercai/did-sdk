@@ -4,7 +4,7 @@
 > **同步状态（2026-11-13）**：本文档与当前代码同步。已实现三 namespace
 > （`chain-account/`、`participant-did/`、`client-did/`）、Ed25519/Sr25519、
 > SS58、FileKeystore v2（`.enc` + index v2）、`sign_checked`、`sd` 盐化哈希工具与 9 个签名输入（含 vp_v1 / vp_sd_v1）。
-> 详见 `docs/implementation-report.md` 与 `docs/acceptance-checklist.md`。
+> 本文档与代码同步；SD-JWT 互操作字节约定见 `docs/selective-disclosure-interop.md`。
 
 ## 0. 定位与设计原则
 
