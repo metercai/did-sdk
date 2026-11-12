@@ -104,7 +104,7 @@ where
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .map_err(|error| DidSdkError::ChainUnavailable(format!("build runtime: {error}")))?;
+            .map_err(|error| DidSdkError::BackendUnavailable(format!("build runtime: {error}")))?;
         runtime.block_on(make_future())
     };
 
@@ -113,7 +113,7 @@ where
             scope
                 .spawn(run)
                 .join()
-                .map_err(|_| DidSdkError::ChainUnavailable("blocking bridge panicked".into()))?
+                .map_err(|_| DidSdkError::BackendUnavailable("blocking bridge panicked".into()))?
         })
     } else {
         run()
@@ -132,7 +132,7 @@ pub(crate) fn map_vault_err(error: KeyVaultError) -> DidSdkError {
         KE::InvalidPassword => DidSdkError::SigningFailed("invalid password".into()),
         KE::Locked => DidSdkError::SigningFailed("keystore locked".into()),
         KE::SigningFailed(message) => DidSdkError::SigningFailed(message),
-        KE::IoError(message) => DidSdkError::ChainUnavailable(message),
+        KE::IoError(message) => DidSdkError::BackendUnavailable(message),
         KE::InvalidKeyFormat(message) => DidSdkError::InvalidArgument(message),
         KE::DecryptionFailed => DidSdkError::SigningFailed("decryption failed".into()),
         KE::SerializationError(message) => DidSdkError::InvalidArgument(message),

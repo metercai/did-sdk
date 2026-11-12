@@ -19,7 +19,6 @@ const KEYS: &[&str] = &[
     "DID_SDK_KEYVAULT_PASSWORD",
     "DID_SDK_KEYVAULT_PASSWORD_FILE",
     "DID_SDK_CENTRALIZED_ENDPOINT",
-    "DID_SDK_CHAIN_ENDPOINT",
     "DID_SDK_CACHE_TTL_SECS",
 ];
 
@@ -46,7 +45,6 @@ fn defaults_when_nothing_set() {
         assert_eq!(config.key_vault.scheme, "file-keystore");
         assert_eq!(config.cache_ttl_secs, 600);
         assert_eq!(config.centralized_endpoint, "http://127.0.0.1:8080");
-        assert_eq!(config.chain_endpoint, "ws://127.0.0.1:9944");
         assert!(config.vc_storage_path.starts_with(dir.path()));
         assert!(config.key_vault.path.starts_with(dir.path()));
         assert!(config.resolved_password.is_some());
@@ -65,7 +63,6 @@ fn env_overrides_defaults() {
             &[
                 ("DID_SDK_MODE", Some("centralized")),
                 ("DID_SDK_CENTRALIZED_ENDPOINT", Some("http://example.test")),
-                ("DID_SDK_CHAIN_ENDPOINT", Some("ws://chain.test:9944")),
                 ("DID_SDK_CACHE_TTL_SECS", Some("42")),
                 ("DID_SDK_KEYVAULT_SCHEME", Some("memory-keystore")),
             ],
@@ -74,7 +71,6 @@ fn env_overrides_defaults() {
             let config = resolve_config(ConfigOverrides::default()).unwrap();
             assert_eq!(config.mode, DidSdkMode::Centralized);
             assert_eq!(config.centralized_endpoint, "http://example.test");
-            assert_eq!(config.chain_endpoint, "ws://chain.test:9944");
             assert_eq!(config.cache_ttl_secs, 42);
             assert_eq!(config.key_vault.scheme, "memory-keystore");
         },
@@ -85,16 +81,19 @@ fn env_overrides_defaults() {
 #[serial]
 fn explicit_overrides_beat_env() {
     let dir = tempfile::tempdir().unwrap();
-    temp_env::with_vars(env(dir.path(), &[("DID_SDK_MODE", Some("chain"))]), || {
-        let config = resolve_config(ConfigOverrides {
-            mode: Some("mock".into()),
-            cache_ttl_secs: Some(7),
-            ..Default::default()
-        })
-        .unwrap();
-        assert_eq!(config.mode, DidSdkMode::Mock);
-        assert_eq!(config.cache_ttl_secs, 7);
-    });
+    temp_env::with_vars(
+        env(dir.path(), &[("DID_SDK_MODE", Some("centralized"))]),
+        || {
+            let config = resolve_config(ConfigOverrides {
+                mode: Some("mock".into()),
+                cache_ttl_secs: Some(7),
+                ..Default::default()
+            })
+            .unwrap();
+            assert_eq!(config.mode, DidSdkMode::Mock);
+            assert_eq!(config.cache_ttl_secs, 7);
+        },
+    );
 }
 
 #[test]
@@ -267,6 +266,16 @@ fn invalid_mode_is_ignored() {
 
 #[test]
 #[serial]
+fn chain_mode_is_rejected_as_invalid() {
+    let dir = tempfile::tempdir().unwrap();
+    temp_env::with_vars(env(dir.path(), &[("DID_SDK_MODE", Some("chain"))]), || {
+        let config = resolve_config(ConfigOverrides::default()).unwrap();
+        assert_eq!(config.mode, DidSdkMode::Mock);
+    });
+}
+
+#[test]
+#[serial]
 fn defaults_are_stable() {
     let config = DidSdkConfig::default();
     assert_eq!(config.mode, DidSdkMode::Mock);
@@ -379,9 +388,6 @@ scheme = "memory-keystore"
 
 [did_sdk.centralized]
 endpoint = "http://nested.test"
-
-[did_sdk.chain]
-endpoint = "ws://nested.test:9944"
 "#,
     )
     .unwrap();
@@ -394,7 +400,6 @@ endpoint = "ws://nested.test:9944"
             let config = resolve_config(ConfigOverrides::default()).unwrap();
             assert_eq!(config.mode, DidSdkMode::Centralized);
             assert_eq!(config.centralized_endpoint, "http://nested.test");
-            assert_eq!(config.chain_endpoint, "ws://nested.test:9944");
             assert_eq!(config.cache_ttl_secs, 12);
             assert_eq!(config.key_vault.scheme, "memory-keystore");
             assert_eq!(config.vc_storage_path, PathBuf::from("./nested-vc"));

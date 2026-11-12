@@ -1,4 +1,4 @@
-//! Centralized 只读 HTTP 契约测试。
+//! Centralized 只读 HTTP 契约测试（仅 DID 解析）。
 
 #![allow(
     clippy::unwrap_used,
@@ -23,50 +23,6 @@ fn config(dir: &Path, endpoint: String) -> ClientConfig {
     config.key_vault.scheme = "memory-keystore".into();
     config.resolved_password = Some(SecretString::from("test".to_string()));
     config
-}
-
-#[tokio::test]
-async fn anchor_get_and_cache_hit() {
-    let dir = tempfile::tempdir().unwrap();
-    let server = MockServer::start().await;
-    let anchor = json!({
-        "anchor_id": "a1",
-        "did": "did:key:z6MkTest",
-        "status": "active",
-        "created_at": 1,
-        "updated_at": 2,
-        "expires_at": null,
-        "payload": {"source": "wiremock"}
-    });
-    Mock::given(method("GET"))
-        .and(path("/anchors/a1"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(anchor))
-        .mount(&server)
-        .await;
-
-    let sdk = build_client_sdk(&config(dir.path(), server.uri())).unwrap();
-    let first = sdk.get_anchor("a1").await.unwrap();
-    assert_eq!(first.anchor_id, "a1");
-    let second = sdk.get_anchor("a1").await.unwrap();
-    assert_eq!(second, first);
-    let requests = server.received_requests().await.unwrap();
-    assert_eq!(requests.len(), 1);
-    assert!(
-        requests
-            .iter()
-            .all(|request| request.method.as_str() == "GET")
-    );
-}
-
-#[tokio::test]
-async fn anchor_404_maps_to_anchor_not_found() {
-    let dir = tempfile::tempdir().unwrap();
-    let server = MockServer::start().await;
-    let sdk = build_client_sdk(&config(dir.path(), server.uri())).unwrap();
-    assert!(matches!(
-        sdk.get_anchor("missing").await.unwrap_err(),
-        DidSdkError::AnchorNotFound(_)
-    ));
 }
 
 #[tokio::test]
@@ -102,18 +58,30 @@ async fn did_get_and_cache_hit() {
 }
 
 #[tokio::test]
-async fn server_error_maps_to_chain_unavailable() {
+async fn did_404_returns_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = MockServer::start().await;
+    let sdk = build_client_sdk(&config(dir.path(), server.uri())).unwrap();
+    assert!(
+        sdk.resolve_did("did:web:missing.example.com")
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn server_error_maps_to_backend_unavailable() {
     let dir = tempfile::tempdir().unwrap();
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/anchors/err"))
+        .and(path("/dids/did:web:err.example.com"))
         .respond_with(ResponseTemplate::new(500))
         .mount(&server)
         .await;
     let sdk = build_client_sdk(&config(dir.path(), server.uri())).unwrap();
     assert!(matches!(
-        sdk.get_anchor("err").await.unwrap_err(),
-        DidSdkError::ChainUnavailable(_)
+        sdk.resolve_did("did:web:err.example.com").unwrap_err(),
+        DidSdkError::BackendUnavailable(_)
     ));
 }
 
@@ -121,26 +89,25 @@ async fn server_error_maps_to_chain_unavailable() {
 async fn zero_ttl_disables_cache() {
     let dir = tempfile::tempdir().unwrap();
     let server = MockServer::start().await;
-    let anchor = json!({
-        "anchor_id": "a1",
-        "did": "did:key:z6MkTest",
-        "status": "active",
-        "created_at": 1,
-        "updated_at": 2,
-        "expires_at": null,
-        "payload": null
+    let did = "did:web:example.com";
+    let record = json!({
+        "did": did,
+        "method": "web",
+        "doc_hash": null,
+        "owner": null,
+        "block_number": null
     });
     Mock::given(method("GET"))
-        .and(path("/anchors/a1"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(anchor))
+        .and(path(format!("/dids/{did}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(record))
         .mount(&server)
         .await;
 
     let mut cfg = config(dir.path(), server.uri());
     cfg.cache_ttl_secs = 0;
     let sdk = build_client_sdk(&cfg).unwrap();
-    sdk.get_anchor("a1").await.unwrap();
-    sdk.get_anchor("a1").await.unwrap();
+    sdk.resolve_did(did).unwrap();
+    sdk.resolve_did(did).unwrap();
     assert_eq!(server.received_requests().await.unwrap().len(), 2);
 }
 

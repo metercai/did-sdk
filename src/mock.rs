@@ -1,4 +1,4 @@
-//! Mock 后端：进程内 anchor 状态与确认策略。
+//! Mock 后端：进程内 DID 状态与确认策略。
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -7,7 +7,7 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 
 use crate::backend::Backend;
-use crate::{AnchorRecord, DidRecord, DidSdkError};
+use crate::{DidRecord, DidSdkError};
 
 /// 签名确认策略（仅 Client + Mock）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,7 +29,6 @@ impl Default for ConfirmPolicy {
 /// 进程内 Mock 后端。
 #[derive(Default)]
 pub struct MockBackend {
-    anchors: RwLock<HashMap<String, AnchorRecord>>,
     dids: RwLock<HashMap<String, DidRecord>>,
     confirm: ConfirmPolicy,
 }
@@ -38,13 +37,6 @@ impl MockBackend {
     /// 创建空 Mock 后端。
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// 预置 anchor。
-    #[must_use]
-    pub fn with_preloaded_anchors(mut self, anchors: HashMap<String, AnchorRecord>) -> Self {
-        self.anchors = RwLock::new(anchors);
-        self
     }
 
     /// 自动确认（默认）。
@@ -89,15 +81,6 @@ impl MockBackend {
 impl Backend for MockBackend {
     async fn resolve_did(&self, did: &str) -> Result<Option<DidRecord>, DidSdkError> {
         Ok(self.dids.read().await.get(did).cloned())
-    }
-
-    async fn get_anchor(&self, anchor_id: &str) -> Result<AnchorRecord, DidSdkError> {
-        self.anchors
-            .read()
-            .await
-            .get(anchor_id)
-            .cloned()
-            .ok_or_else(|| DidSdkError::AnchorNotFound(anchor_id.to_string()))
     }
 
     async fn confirm_signing(&self) -> Result<(), DidSdkError> {

@@ -33,33 +33,36 @@
 | K12 | 三类签名入口隔离 | ✅ | namespace 单测 + did-sdk 使用 `ClientDid` |
 | K13 | 签名对象字段与链上字段对应 | ✅ | `participant_registration_v1` 等固定格式测试 |
 
-## 2. did-sdk 契约（D1–D15）
+## 2. did-sdk 契约（D1–D18）
 
 | 编号 | 验收项 | 状态 | 验证 / 证据 |
 |---|---|---|---|
 | D1 | 接口契约完整 | ✅ | `DidSdk<Client>` / `DidSdk<Server>` 编译 |
 | D2 | 类型参数编译期隔离 | ✅ | 方法按 `impl DidSdk<Client>` / `impl DidSdk<Server>` 分离 |
-| D3 | 三后端模式切换 | ✅ | `ClientConfig.mode` + `build_client_sdk` |
-| D4 | 三后端语义一致 | ✅ | `tests/consistency.rs` |
+| D3 | 两后端模式切换 | ✅ | `ClientConfig.mode`（mock / centralized）+ `build_client_sdk` |
+| D4 | 两后端语义一致 | ✅ | `tests/consistency.rs` |
 | D5 | did:key / did:peer:0/1/2 / did:web | ✅ | `tests/did_methods.rs`；did:web URL 单测 |
 | D6 | Mock 自动确认/拒绝/延迟（仅 Client） | ✅ | `tests/user_rejected.rs` |
 | D7 | Centralized 只读 | ✅ | `tests/centralized_contract.rs` |
-| D8 | Chain 只读 | ✅ | `tests/consistency.rs` + `#[ignore]` 真链测试 |
+| D8 | 无 Chain 后端 / 无 subxt | ✅ | `cargo tree -p did-sdk` 无 subxt；无 ChainBackend |
 | D9 | Client 私钥安全 | ✅ | KeyVault 封装 + 用户确认 |
 | D10 | 两模式均不持链账户私钥 | ✅ | 代码审查；无 Signer 注入 |
 | D11 | keyvault-core 集成 | ✅ | Client 经 `FileKeystore` 管理 `client-did/` |
 | D12 | VC 钱包统一 | ✅ | 两模式共享 `store/get/list/remove/build_vp` |
-| D13 | Server 不持签名私钥 | ✅ | `assemble_vc_with_proof` 只接受外部 `Proof` |
-| D14 | 一致性测试 | ✅ | Mock / Centralized / Chain 本地流程 |
-| D15 | Server 校验他人 VC | ✅ | `server_verifies_client_issued_vc` / tampered 测试 |
+| D13 | Server 生产不持签名私钥 | ✅ | `assemble_vc_with_proof` 接受外部 `Proof`；开发/测试可配置 FileKeystore |
+| D14 | 一致性测试 | ✅ | Mock / Centralized 本地流程 |
+| D15 | Server 校验他人 VC | ✅ | issuer 签名/有效期/注册状态；不做链上锚定查询 |
+| D16 | 无 `subxt` 依赖 | ✅ | Cargo.toml / `cargo tree -p did-sdk` |
+| D17 | 无链上查询接口 | ✅ | 无 `get_anchor` / `ChainBackend` |
+| D18 | 锚定查询职责边界 | ✅ | 签名/验签不读取锚定结果 |
 
 ## 3. 发布形态（S1–S3）
 
 | 编号 | 验收项 | 状态 | 证据 |
 |---|---|---|---|
-| S1 | Linux musl 完全静态 | ✅ | `rust-musl` run [43216003000](https://github.com/metercai/did-sdk/actions/runs/43216003000)；x86_64/aarch64 `statically linked` + `ldd: not a dynamic executable` |
+| S1 | Linux musl 完全静态 | ⏳ | 待 R1 推送后重跑 `rust-musl` |
 | S2 | `UserRejected` 三语言透传 | ✅ | Rust 测试 + Python/Node 映射代码 |
-| S3 | 双产物构建矩阵 | ✅ | Rust 4/4、Python 10/10（client+server）、Node 10/10（client+server）；CI `43216003187`、Python `43216002988`、Node `43216003104` |
+| S3 | 双产物构建矩阵 | ⏳ | 待 R1 推送后重跑（预期 Rust 4/4、Python 10/10、Node 10/10） |
 
 ## 4. 绑定
 
@@ -77,7 +80,7 @@
 | 套件 | 结果 |
 |---|---|
 | `cargo test -p keyvault-core` | **9 单测 + 16 集成 = 25 passed** |
-| `cargo test -p did-sdk` | **3 单测 + 50 集成 = 53 passed，1 ignored** |
+| `cargo test -p did-sdk` | **1 单测 + 47 集成 = 48 passed** |
 | `cargo fmt --all -- --check` | 通过 |
 | `cargo clippy --workspace --exclude did-sdk-python --exclude did-sdk-python-server --exclude did-sdk-node --exclude did-sdk-node-server --all-targets -- -D warnings` | 通过 |
 | Python `pytest` | **10 passed** |
@@ -99,25 +102,24 @@
 | Rust crate | `did-sdk-client` | `did-sdk-server` | ✅ |
 | Python wheel | `did-sdk-client` (`did_sdk`) | `did-sdk-server` (`did_sdk_server`) | ✅ 本地构建/测试 |
 | Node addon | `@did-sdk/client` | `@did-sdk/server` | ✅ 本地构建/测试 |
-| CI 矩阵 | 5 平台 | 5 平台 | ✅ 10/10 全绿 |
+| CI 矩阵 | 5 平台 | 5 平台 | ⏳ 待 R1 推送后重跑 |
 
 Server 默认 `key_vault: Some(FileKeystore)`；`key_vault_scheme="none"` 可关闭本地签名器。
 VC 加密密钥默认复用 KeyVault 密码；无 KeyVault 时回退
 `DID_SDK_VC_STORAGE_PASSWORD` / 自动 `.vc_password`。
 
-## 6. GitHub Actions（v2 代码提交 `2925627`）
+## 6. GitHub Actions（R1 后待重跑）
 
-| workflow | run | 结果 |
-|---|---|---|
-| `ci` | [43216003187](https://github.com/metercai/did-sdk/actions/runs/43216003187) | success |
-| `rust-musl` | [43216003000](https://github.com/metercai/did-sdk/actions/runs/43216003000) | 4/4 success |
-| `python` | [43216002988](https://github.com/metercai/did-sdk/actions/runs/43216002988) | 10/10 success |
-| `node` | [43216003104](https://github.com/metercai/did-sdk/actions/runs/43216003104) | 10/10 success |
-| `cross-lang` | [43216003140](https://github.com/metercai/did-sdk/actions/runs/43216003140) | success |
+| workflow | 结果 |
+|---|---|
+| `ci` | ⏳ 待重跑 |
+| `rust-musl` | ⏳ 待重跑 |
+| `python` | ⏳ 待重跑 |
+| `node` | ⏳ 待重跑 |
+| `cross-lang` | ⏳ 待重跑 |
 
 ## 7. 待外部条件
 
 | 项 | 原因 |
 |---|---|
-| 真实 Chain | 无 identity-chain 节点 / pallet 元数据 |
 | 发布 | crates.io / PyPI / npm 未发布 |

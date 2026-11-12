@@ -2,7 +2,7 @@
 //!
 //! - `DidSdk<Client>`：客户端本地密钥、用户确认式签名；
 //! - `DidSdk<Server>`：服务端固定 did:web、外部注入 Proof、校验他人 VC；
-//! - 三种后端：Mock / Centralized / Chain。
+//! - 两种后端：Mock / Centralized（不承担链上查询）。
 
 pub mod config;
 pub mod error;
@@ -11,7 +11,6 @@ pub mod types;
 
 pub mod backend;
 mod centralized;
-mod chain;
 mod core;
 pub mod did;
 mod did_signature;
@@ -31,7 +30,6 @@ use crate::server_request::ServerRequestHandler;
 
 pub use backend::Backend as BackendTrait;
 pub use centralized::CentralizedBackend;
-pub use chain::ChainBackend;
 pub use config::{
     ClientConfig, ConfigOverrides, DidSdkConfig, DidSdkMode, KeyVaultConfig, ServerConfig,
     build_client_sdk, build_client_sdk_with_backend, build_server_sdk,
@@ -117,11 +115,6 @@ impl<M: SdkMode> DidSdk<M> {
         let backend = self.backend.clone();
         let did = did.to_string();
         block_on_backend(move || async move { backend.resolve_did(&did).await })
-    }
-
-    /// 查询 anchor。
-    pub async fn get_anchor(&self, anchor_id: &str) -> Result<AnchorRecord, DidSdkError> {
-        self.backend.get_anchor(anchor_id).await
     }
 
     /// 存储 VC。
@@ -558,28 +551,11 @@ impl DidSdk<Server> {
             reason = Some("VC expired".into());
         }
 
-        let mut anchor_valid = vc.anchor_id.is_none();
-        if let Some(anchor_id) = &vc.anchor_id {
-            match self.get_anchor(anchor_id).await {
-                Ok(anchor) => {
-                    anchor_valid = anchor.status == AddressStatus::Active;
-                    if !anchor_valid {
-                        reason = Some(format!("anchor status: {:?}", anchor.status));
-                    }
-                }
-                Err(error) => {
-                    anchor_valid = false;
-                    reason = Some(error.to_string());
-                }
-            }
-        }
-
         let issuer_registered = issuer_resolved;
         Ok(VcVerificationResult {
-            verified: signature_ok && !expired && anchor_valid,
+            verified: signature_ok && !expired,
             issuer_resolved,
             issuer_registered,
-            anchor_valid,
             reason,
         })
     }

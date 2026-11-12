@@ -1,4 +1,4 @@
-//! Centralized 后端：只读 HTTP（仅 GET），带 TTL 缓存。
+//! Centralized 后端：只读 HTTP（仅 GET DID 解析），带 TTL 缓存。
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -7,7 +7,7 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 
 use crate::backend::Backend;
-use crate::{AnchorRecord, DidRecord, DidSdkError};
+use crate::{DidRecord, DidSdkError};
 
 #[derive(Debug, Clone)]
 struct CacheEntry<T> {
@@ -20,7 +20,6 @@ pub struct CentralizedBackend {
     http: reqwest::Client,
     endpoint: String,
     ttl_secs: u64,
-    anchors: RwLock<HashMap<String, CacheEntry<AnchorRecord>>>,
     dids: RwLock<HashMap<String, CacheEntry<DidRecord>>>,
 }
 
@@ -36,7 +35,6 @@ impl CentralizedBackend {
             http,
             endpoint,
             ttl_secs,
-            anchors: RwLock::new(HashMap::new()),
             dids: RwLock::new(HashMap::new()),
         })
     }
@@ -59,29 +57,6 @@ impl CentralizedBackend {
         Ok(url)
     }
 
-    async fn fetch_anchor(&self, anchor_id: &str) -> Result<AnchorRecord, DidSdkError> {
-        let url = self.url("anchors", anchor_id)?;
-        let response = self
-            .http
-            .get(url)
-            .send()
-            .await
-            .map_err(|error| DidSdkError::ChainUnavailable(error.to_string()))?;
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Err(DidSdkError::AnchorNotFound(anchor_id.to_string()));
-        }
-        if !response.status().is_success() {
-            return Err(DidSdkError::ChainUnavailable(format!(
-                "GET anchor returned HTTP {}",
-                response.status()
-            )));
-        }
-        response
-            .json::<AnchorRecord>()
-            .await
-            .map_err(|error| DidSdkError::ChainUnavailable(format!("invalid anchor JSON: {error}")))
-    }
-
     async fn fetch_did(&self, did: &str) -> Result<Option<DidRecord>, DidSdkError> {
         let url = self.url("dids", did)?;
         let response = self
@@ -89,12 +64,12 @@ impl CentralizedBackend {
             .get(url)
             .send()
             .await
-            .map_err(|error| DidSdkError::ChainUnavailable(error.to_string()))?;
+            .map_err(|error| DidSdkError::BackendUnavailable(error.to_string()))?;
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Ok(None);
         }
         if !response.status().is_success() {
-            return Err(DidSdkError::ChainUnavailable(format!(
+            return Err(DidSdkError::BackendUnavailable(format!(
                 "GET DID returned HTTP {}",
                 response.status()
             )));
@@ -103,7 +78,7 @@ impl CentralizedBackend {
             .json::<DidRecord>()
             .await
             .map(Some)
-            .map_err(|error| DidSdkError::ChainUnavailable(format!("invalid DID JSON: {error}")))
+            .map_err(|error| DidSdkError::BackendUnavailable(format!("invalid DID JSON: {error}")))
     }
 }
 
@@ -129,25 +104,5 @@ impl Backend for CentralizedBackend {
             },
         );
         Ok(Some(record))
-    }
-
-    async fn get_anchor(&self, anchor_id: &str) -> Result<AnchorRecord, DidSdkError> {
-        {
-            let cache = self.anchors.read().await;
-            if let Some(entry) = cache.get(anchor_id) {
-                if Self::fresh(entry, self.ttl_secs) {
-                    return Ok(entry.value.clone());
-                }
-            }
-        }
-        let record = self.fetch_anchor(anchor_id).await?;
-        self.anchors.write().await.insert(
-            anchor_id.to_string(),
-            CacheEntry {
-                value: record.clone(),
-                inserted: Instant::now(),
-            },
-        );
-        Ok(record)
     }
 }

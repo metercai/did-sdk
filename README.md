@@ -7,10 +7,11 @@
 [![cross-lang](https://github.com/metercai/did-sdk/actions/workflows/cross-lang.yml/badge.svg)](https://github.com/metercai/did-sdk/actions/workflows/cross-lang.yml)
 
 DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` 两种运行模式**
-× **Mock / Centralized / Chain 三种后端** × **did:key / did:peer / did:web 三种 DID 方法**。
+× **Mock / Centralized 两种后端** × **did:key / did:peer / did:web 三种 DID 方法**。
 
 > **当前状态：已按更新版规格重构，本地与 GitHub Actions 验证通过。**
-> - 规格：`01-DidSdk接口契约与实现规格书1.md` / `04-keyvault-core_crate规格书1.md`（上游输入）
+> - 规格：[`01-DidSdk接口契约与实现规格书1.md`](docs/01-DidSdk接口契约与实现规格书1.md) / [`04-keyvault-core_crate规格书1.md`](docs/04-keyvault-core_crate规格书1.md)
+> - R1 修订：[`docs/did-sdk移除链上查询与subxt依赖的修订.md`](docs/did-sdk移除链上查询与subxt依赖的修订.md)
 > - 实施/迁移说明：[`docs/implementation-report.md`](docs/implementation-report.md)
 > - 验收清单：[`docs/acceptance-checklist.md`](docs/acceptance-checklist.md)
 > - CI 维护：[`docs/ci-setup.md`](docs/ci-setup.md)
@@ -29,7 +30,7 @@ DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` �
 - `DidSdk<Client>` 没有 `resolve_did_web` / `assemble_vc_with_proof` / `verify_vc`；
 - `DidSdk<Server>` 没有 `generate_did_key` / `generate_did_peer` / `sign_with_did_key` / `issue_self_asserted_vc`。
 
-三种后端（Mock / Centralized / Chain）与两种运行模式正交，只影响 `resolve_did` / `get_anchor`。
+两种后端（Mock / Centralized）与两种运行模式正交，只影响 `resolve_did`；**不承担链上查询，不依赖 `subxt`**。
 
 ---
 
@@ -237,7 +238,7 @@ VC 的 `proof` 结构：
 
 ```toml
 [did_sdk]
-mode = "mock"                 # mock / centralized / chain
+mode = "mock"                 # mock / centralized
 subject_kind = "client"       # client / server（构造工厂决定类型）
 vc_storage_path = "./vc_store"
 cache_ttl_secs = 600
@@ -250,12 +251,9 @@ password_env = "DID_SDK_KEYVAULT_PASSWORD"
 [did_sdk.centralized]
 endpoint = "http://127.0.0.1:8080"
 
-[did_sdk.chain]
-endpoint = "ws://127.0.0.1:9944"
-
 # Server（由 chain-sdk / chain-owner-sdk 装配）
 # [did_sdk]
-# mode = "chain"
+# mode = "centralized"
 # subject_kind = "server"
 # participant_did = "did:web:issuer.example.com:mail"
 # vc_storage_path = "./participant-vc-store"
@@ -279,7 +277,6 @@ endpoint = "ws://127.0.0.1:9944"
 | `DID_SDK_KEYVAULT_PASSWORD` | 密码（最高优先） |
 | `DID_SDK_KEYVAULT_PASSWORD_FILE` | 密码文件 |
 | `DID_SDK_CENTRALIZED_ENDPOINT` | Centralized 端点 |
-| `DID_SDK_CHAIN_ENDPOINT` | Chain 端点 |
 | `DID_SDK_CACHE_TTL_SECS` | TTL |
 | `DID_SDK_VC_STORAGE_PASSWORD` | 无 KeyVault 时的 VC 加密密码（否则自动生成 `.vc_password`，0600） |
 
@@ -303,6 +300,7 @@ endpoint = "ws://127.0.0.1:9944"
 - 三类 namespace 物理隔离：`chain-account/`（sr25519）、`participant-did/`（ed25519）、`client-did/`（ed25519）；跨 namespace 签名返回 `NamespaceViolation`。
 - `FileKeystore`：Argon2id + ChaCha20-Poly1305，按 namespace 子目录 + `index.json`，原子写。
 - Client 签名前用户确认；Server 生产环境不持签名私钥，开发/测试/试运行可配置本地 `FileKeystore`。
+- **不承担链上查询**：无 `get_anchor`、无 `Chain` 后端、无 `subxt`；锚定核对由验证方 `chain-sdk` 完成。
 - 链访问只读；不注入链账户私钥。
 - VC 文件静态加密：`DVCS` 密文 + ChaCha20-Poly1305；默认复用 KeyVault 密码，
   Server 默认 FileKeystore，无 KeyVault 时回退 `DID_SDK_VC_STORAGE_PASSWORD` / 自动 `.vc_password`（0600）。

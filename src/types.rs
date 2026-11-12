@@ -170,10 +170,8 @@ pub struct VcVerificationResult {
     pub verified: bool,
     /// issuer DID 是否解析成功。
     pub issuer_resolved: bool,
-    /// issuer 是否已注册/锚定。
+    /// issuer 是否已注册/可解析。
     pub issuer_registered: bool,
-    /// anchor 是否有效。
-    pub anchor_valid: bool,
     /// 失败原因。
     pub reason: Option<String>,
 }
@@ -244,26 +242,6 @@ pub struct VerifiablePresentation {
     /// proof。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proof: Option<Proof>,
-}
-
-/// Anchor 记录。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AnchorRecord {
-    /// Anchor id。
-    pub anchor_id: String,
-    /// 关联 DID。
-    pub did: String,
-    /// 状态。
-    pub status: AddressStatus,
-    /// 创建时间（Unix 秒）。
-    pub created_at: u64,
-    /// 更新时间（Unix 秒）。
-    pub updated_at: u64,
-    /// 过期时间（Unix 秒）。
-    pub expires_at: Option<u64>,
-    /// 附加字段。
-    #[serde(default)]
-    pub payload: serde_json::Value,
 }
 
 impl DidRecord {

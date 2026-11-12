@@ -6,7 +6,7 @@ use std::sync::Arc;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 
-use crate::{CentralizedBackend, ChainBackend, Client, DidSdkError, MockBackend, Server};
+use crate::{CentralizedBackend, Client, DidSdkError, MockBackend, Server};
 
 /// 后端模式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -17,8 +17,6 @@ pub enum DidSdkMode {
     Mock,
     /// 中心化只读 HTTP。
     Centralized,
-    /// Substrate 只读 storage。
-    Chain,
 }
 
 /// 密钥库配置。
@@ -65,9 +63,7 @@ pub struct ClientConfig {
     pub key_vault: KeyVaultConfig,
     /// Centralized 端点。
     pub centralized_endpoint: String,
-    /// Chain 端点。
-    pub chain_endpoint: String,
-    /// Anchor 缓存 TTL。
+    /// DID 缓存 TTL。
     pub cache_ttl_secs: u64,
     /// 已解析密码。
     #[serde(skip)]
@@ -82,7 +78,6 @@ impl Default for ClientConfig {
             vc_storage_path: home.join("vc_store"),
             key_vault: KeyVaultConfig::default(),
             centralized_endpoint: "http://127.0.0.1:8080".into(),
-            chain_endpoint: "ws://127.0.0.1:9944".into(),
             cache_ttl_secs: 600,
             resolved_password: None,
         }
@@ -106,9 +101,7 @@ pub struct ServerConfig {
     pub resolved_password: Option<SecretString>,
     /// Centralized 端点。
     pub centralized_endpoint: String,
-    /// Chain 端点。
-    pub chain_endpoint: String,
-    /// Anchor 缓存 TTL。
+    /// DID 缓存 TTL。
     pub cache_ttl_secs: u64,
 }
 
@@ -116,7 +109,7 @@ impl Default for ServerConfig {
     fn default() -> Self {
         let home = default_home();
         Self {
-            mode: DidSdkMode::Chain,
+            mode: DidSdkMode::Centralized,
             participant_did: String::new(),
             vc_storage_path: home.join("participant-vc-store"),
             key_vault: Some(KeyVaultConfig {
@@ -126,7 +119,6 @@ impl Default for ServerConfig {
             }),
             resolved_password: None,
             centralized_endpoint: "http://127.0.0.1:8080".into(),
-            chain_endpoint: "ws://127.0.0.1:9944".into(),
             cache_ttl_secs: 600,
         }
     }
@@ -150,8 +142,6 @@ pub struct ConfigOverrides {
     pub key_vault_password: Option<String>,
     /// Centralized 端点。
     pub centralized_endpoint: Option<String>,
-    /// Chain 端点。
-    pub chain_endpoint: Option<String>,
     /// TTL。
     pub cache_ttl_secs: Option<u64>,
     /// 密码文件。
@@ -173,7 +163,6 @@ fn parse_mode(value: &str) -> Option<DidSdkMode> {
     match value.trim().to_ascii_lowercase().as_str() {
         "mock" => Some(DidSdkMode::Mock),
         "centralized" => Some(DidSdkMode::Centralized),
-        "chain" => Some(DidSdkMode::Chain),
         _ => None,
     }
 }
@@ -185,7 +174,6 @@ struct FileConfig {
     vc_storage_path: Option<PathBuf>,
     key_vault: Option<FileKeyVaultConfig>,
     centralized_endpoint: Option<String>,
-    chain_endpoint: Option<String>,
     cache_ttl_secs: Option<u64>,
 }
 
@@ -195,7 +183,6 @@ struct FileSection {
     vc_storage_path: Option<PathBuf>,
     key_vault: Option<FileKeyVaultConfig>,
     centralized: Option<EndpointSection>,
-    chain: Option<EndpointSection>,
     cache_ttl_secs: Option<u64>,
 }
 
@@ -259,9 +246,6 @@ fn merge_file(config: &mut ClientConfig, file: FileConfig) {
     if let Some(endpoint) = file.centralized_endpoint {
         config.centralized_endpoint = endpoint;
     }
-    if let Some(endpoint) = file.chain_endpoint {
-        config.chain_endpoint = endpoint;
-    }
     if let Some(ttl) = file.cache_ttl_secs {
         config.cache_ttl_secs = ttl;
     }
@@ -285,9 +269,6 @@ fn apply_file_section(config: &mut ClientConfig, section: Option<FileSection>) {
     }
     if let Some(endpoint) = section.centralized.and_then(|value| value.endpoint) {
         config.centralized_endpoint = endpoint;
-    }
-    if let Some(endpoint) = section.chain.and_then(|value| value.endpoint) {
-        config.chain_endpoint = endpoint;
     }
     if let Some(key_vault) = section.key_vault {
         merge_key_vault(&mut config.key_vault, key_vault);
@@ -336,9 +317,6 @@ fn apply_env(config: &mut ClientConfig) {
     if let Ok(value) = std::env::var("DID_SDK_CENTRALIZED_ENDPOINT") {
         config.centralized_endpoint = value;
     }
-    if let Ok(value) = std::env::var("DID_SDK_CHAIN_ENDPOINT") {
-        config.chain_endpoint = value;
-    }
     if let Ok(value) = std::env::var("DID_SDK_CACHE_TTL_SECS") {
         if let Ok(ttl) = value.parse() {
             config.cache_ttl_secs = ttl;
@@ -361,9 +339,6 @@ fn apply_overrides(config: &mut ClientConfig, overrides: ConfigOverrides) {
     }
     if let Some(endpoint) = overrides.centralized_endpoint {
         config.centralized_endpoint = endpoint;
-    }
-    if let Some(endpoint) = overrides.chain_endpoint {
-        config.chain_endpoint = endpoint;
     }
     if let Some(ttl) = overrides.cache_ttl_secs {
         config.cache_ttl_secs = ttl;
@@ -435,7 +410,6 @@ fn build_vault_with(
 fn build_backend(
     mode: DidSdkMode,
     centralized_endpoint: &str,
-    chain_endpoint: &str,
     ttl_secs: u64,
 ) -> Result<Arc<dyn crate::backend::Backend>, DidSdkError> {
     match mode {
@@ -444,10 +418,6 @@ fn build_backend(
             centralized_endpoint.to_string(),
             ttl_secs,
         )?)),
-        DidSdkMode::Chain => Ok(Arc::new(ChainBackend::new(
-            chain_endpoint.to_string(),
-            ttl_secs,
-        ))),
     }
 }
 
@@ -459,7 +429,6 @@ pub fn build_client_sdk(
     let backend = build_backend(
         config.mode,
         &config.centralized_endpoint,
-        &config.chain_endpoint,
         config.cache_ttl_secs,
     )?;
     build_client_sdk_with_backend(config, backend, vault)
@@ -492,7 +461,6 @@ pub fn build_server_sdk(
     let backend = build_backend(
         config.mode,
         &config.centralized_endpoint,
-        &config.chain_endpoint,
         config.cache_ttl_secs,
     )?;
     build_server_sdk_with_backend(config, backend)

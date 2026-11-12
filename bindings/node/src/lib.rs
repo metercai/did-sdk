@@ -26,7 +26,6 @@ pub struct JsConfigOverrides {
     pub key_vault_password: Option<String>,
     pub key_vault_password_file: Option<String>,
     pub centralized_endpoint: Option<String>,
-    pub chain_endpoint: Option<String>,
     pub cache_ttl_secs: Option<u32>,
 }
 
@@ -50,7 +49,6 @@ fn to_overrides(overrides: Option<JsConfigOverrides>) -> ConfigOverrides {
         key_vault_password: overrides.key_vault_password,
         key_vault_password_file: overrides.key_vault_password_file.map(Into::into),
         centralized_endpoint: overrides.centralized_endpoint,
-        chain_endpoint: overrides.chain_endpoint,
         cache_ttl_secs: overrides.cache_ttl_secs.map(u64::from),
     }
 }
@@ -58,7 +56,7 @@ fn to_overrides(overrides: Option<JsConfigOverrides>) -> ConfigOverrides {
 fn to_napi_err(error: CoreError) -> napi::Error {
     let code = match &error {
         CoreError::UserRejected => "UserRejected",
-        CoreError::VcNotFound(_) | CoreError::AnchorNotFound(_) => "NotFound",
+        CoreError::VcNotFound(_) => "NotFound",
         CoreError::InvalidArgument(_)
         | CoreError::UnsupportedDidMethod(_)
         | CoreError::DidResolutionFailed(_) => "InvalidArgument",
@@ -87,7 +85,6 @@ fn parse_mode(value: &str) -> napi::Result<DidSdkMode> {
     match value.to_ascii_lowercase().as_str() {
         "mock" => Ok(DidSdkMode::Mock),
         "centralized" => Ok(DidSdkMode::Centralized),
-        "chain" => Ok(DidSdkMode::Chain),
         other => Err(napi::Error::from_reason(format!(
             "InvalidArgument: invalid mode {other}"
         ))),
@@ -106,7 +103,6 @@ fn server_config(
         key_vault_password: None,
         key_vault_password_file: None,
         centralized_endpoint: None,
-        chain_endpoint: None,
         cache_ttl_secs: None,
     });
     let mut config = ServerConfig::default();
@@ -119,9 +115,6 @@ fn server_config(
     }
     if let Some(endpoint) = overrides.centralized_endpoint {
         config.centralized_endpoint = endpoint;
-    }
-    if let Some(endpoint) = overrides.chain_endpoint {
-        config.chain_endpoint = endpoint;
     }
     if let Some(ttl) = overrides.cache_ttl_secs {
         config.cache_ttl_secs = u64::from(ttl);
@@ -260,16 +253,6 @@ impl ServerDidSdk {
     pub fn resolve_did(&self, did: String) -> napi::Result<Option<serde_json::Value>> {
         let record = self.inner.resolve_did(&did).map_err(to_napi_err)?;
         record.map(|record| to_json(&record)).transpose()
-    }
-
-    #[napi]
-    pub async fn get_anchor(&self, anchor_id: String) -> napi::Result<serde_json::Value> {
-        let anchor = self
-            .inner
-            .get_anchor(&anchor_id)
-            .await
-            .map_err(to_napi_err)?;
-        to_json(&anchor)
     }
 
     #[napi]
@@ -494,16 +477,6 @@ impl DidSdk {
             .await
             .map_err(to_napi_err)?;
         Ok(Buffer::from(signature.0))
-    }
-
-    #[napi]
-    pub async fn get_anchor(&self, anchor_id: String) -> napi::Result<serde_json::Value> {
-        let anchor = self
-            .inner
-            .get_anchor(&anchor_id)
-            .await
-            .map_err(to_napi_err)?;
-        to_json(&anchor)
     }
 
     #[napi]

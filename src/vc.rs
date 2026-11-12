@@ -45,7 +45,7 @@ impl VcStore {
         password: Option<secrecy::SecretString>,
     ) -> Result<Self, DidSdkError> {
         std::fs::create_dir_all(&root)
-            .map_err(|error| DidSdkError::ChainUnavailable(format!("create VC dir: {error}")))?;
+            .map_err(|error| DidSdkError::BackendUnavailable(format!("create VC dir: {error}")))?;
         let password = match password {
             Some(password) => secrecy::ExposeSecret::expose_secret(&password).to_string(),
             None => resolve_vc_password(&root)?,
@@ -73,12 +73,12 @@ impl VcStore {
     fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, DidSdkError> {
         let mut nonce = [0u8; NONCE_LEN];
         getrandom::fill(&mut nonce)
-            .map_err(|error| DidSdkError::ChainUnavailable(format!("entropy: {error}")))?;
+            .map_err(|error| DidSdkError::BackendUnavailable(format!("entropy: {error}")))?;
         let cipher = ChaCha20Poly1305::new(Key::from_slice(&self.key));
         let mut ciphertext = plaintext.to_vec();
         let tag = cipher
             .encrypt_in_place_detached(Nonce::from_slice(&nonce), VC_STORE_MAGIC, &mut ciphertext)
-            .map_err(|error| DidSdkError::ChainUnavailable(format!("VC encryption: {error}")))?;
+            .map_err(|error| DidSdkError::BackendUnavailable(format!("VC encryption: {error}")))?;
         let mut out = Vec::with_capacity(4 + 1 + NONCE_LEN + ciphertext.len() + TAG_LEN);
         out.extend_from_slice(VC_STORE_MAGIC);
         out.push(VC_STORE_VERSION);
@@ -121,7 +121,7 @@ impl VcStore {
 
     fn load_vc(&self, path: &Path, anchor_id: &str) -> Result<VerifiableCredential, DidSdkError> {
         let raw = std::fs::read(path).map_err(|error| {
-            DidSdkError::ChainUnavailable(format!("read {}: {error}", path.display()))
+            DidSdkError::BackendUnavailable(format!("read {}: {error}", path.display()))
         })?;
         // 兼容极早期明文文件：读取后立即重新加密。
         if raw.first() == Some(&b'{') {
@@ -153,7 +153,7 @@ impl VcStore {
             .map_err(|error| DidSdkError::InvalidArgument(format!("serialize VC: {error}")))?;
         let encrypted = self.encrypt(&json)?;
         atomic_write(&self.path_for(anchor_id), &encrypted)
-            .map_err(|error| DidSdkError::ChainUnavailable(format!("write VC: {error}")))
+            .map_err(|error| DidSdkError::BackendUnavailable(format!("write VC: {error}")))
     }
 
     pub(crate) fn get(&self, anchor_id: &str) -> Result<Option<VerifiableCredential>, DidSdkError> {
@@ -170,13 +170,14 @@ impl VcStore {
             Ok(entries) => entries,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(out),
             Err(error) => {
-                return Err(DidSdkError::ChainUnavailable(format!(
+                return Err(DidSdkError::BackendUnavailable(format!(
                     "read VC dir: {error}"
                 )));
             }
         };
         for entry in entries {
-            let entry = entry.map_err(|error| DidSdkError::ChainUnavailable(error.to_string()))?;
+            let entry =
+                entry.map_err(|error| DidSdkError::BackendUnavailable(error.to_string()))?;
             let path = entry.path();
             if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
                 continue;
@@ -227,7 +228,9 @@ impl VcStore {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 Err(DidSdkError::VcNotFound(anchor_id.to_string()))
             }
-            Err(error) => Err(DidSdkError::ChainUnavailable(format!("remove VC: {error}"))),
+            Err(error) => Err(DidSdkError::BackendUnavailable(format!(
+                "remove VC: {error}"
+            ))),
         }
     }
 }

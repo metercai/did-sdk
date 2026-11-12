@@ -53,8 +53,6 @@ tracing = "0.1"
 tokio = { version = "1.44", features = ["rt-multi-thread", "macros", "sync", "fs", "time"] }
 # 关键：musl 静态下必须用 rustls（纯 Rust TLS），不能拉 OpenSSL/native-tls。
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-subxt = "0.50"
-scale-value = "0.18"
 dirs = "6"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
@@ -89,8 +87,6 @@ bs58 = { workspace = true }
 secrecy = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true }
-subxt = { workspace = true }
-scale-value = { workspace = true }
 dirs = { workspace = true }
 hex = { workspace = true }
 

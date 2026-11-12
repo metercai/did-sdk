@@ -20,6 +20,9 @@
 > [`docs/implementation-report.md`](implementation-report.md)、
 > [`docs/acceptance-checklist.md`](acceptance-checklist.md) 为准。
 >
+> 2026-11-12 R1 追加：移除 `Chain` 后端、`get_anchor` 与 `subxt`/`scale-value` 依赖，
+> 收敛为 `Mock` / `Centralized`；规格书已保存到 `docs/01-...`、`docs/04-...` 并同步。
+>
 > 2026-11-12 追加：Client/Server 双产物（`did-sdk-client`/`did-sdk-server`、
 > `did-sdk-client`/`did-sdk-server` wheel、`@did-sdk/client`/`@did-sdk/server` addon），
 > Server 默认 FileKeystore 签名器，VC 密文存储。
@@ -403,11 +406,11 @@ cargo test -p keyvault-core
    - `tests/config_resolution.rs` 补齐 5 条以上；
    - `tests/user_rejected.rs` 两条（Mock AutoReject、自定义 vault 返回 UserRejected）；
    - `tests/centralized_contract.rs`：wiremock 只挂两个 GET；断言
-     `received_requests()` 全部是 GET；404 → `AnchorNotFound` / `resolve_did` 返回 `None`；
+     `received_requests()` 全部是 GET；DID 404 → `resolve_did` 返回 `None`；
      缓存命中后请求数不增加；
    - `tests/consistency.rs`：Mock 与 Centralized（wiremock）跑同一组断言
      （生成 key → 签名 → header 往返 → VC issue/store/get/list/remove → VP）；
-   - Chain 测试 `#[ignore]`，入口用 `DID_SDK_CHAIN_ENDPOINT`。
+   - R1 后不再有 Chain 测试 / `get_anchor`；`did-sdk` 两后端边界见验收 D8/D16–D18。
 
 **关键语义**
 

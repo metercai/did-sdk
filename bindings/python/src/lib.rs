@@ -29,9 +29,7 @@ create_exception!(_did_sdk, InvalidArgumentError, PyValueError);
 fn to_pyerr(error: CoreError) -> PyErr {
     match error {
         CoreError::UserRejected => UserRejectedError::new_err("UserRejected"),
-        CoreError::VcNotFound(message) | CoreError::AnchorNotFound(message) => {
-            NotFoundError::new_err(message)
-        }
+        CoreError::VcNotFound(message) => NotFoundError::new_err(message),
         CoreError::InvalidArgument(message)
         | CoreError::UnsupportedDidMethod(message)
         | CoreError::DidResolutionFailed(message) => InvalidArgumentError::new_err(message),
@@ -78,7 +76,6 @@ fn parse_overrides(dict: Option<&Bound<'_, PyDict>>) -> PyResult<ConfigOverrides
                 overrides.key_vault_password_file = Some(PathBuf::from(value.extract::<String>()?));
             }
             "centralized_endpoint" => overrides.centralized_endpoint = Some(value.extract()?),
-            "chain_endpoint" => overrides.chain_endpoint = Some(value.extract()?),
             "cache_ttl_secs" => overrides.cache_ttl_secs = Some(value.extract()?),
             other => {
                 return Err(PyValueError::new_err(format!(
@@ -325,15 +322,6 @@ impl DidSdk {
         })
     }
 
-    /// 获取 anchor。
-    fn get_anchor<'py>(&self, py: Python<'py>, anchor_id: String) -> PyResult<Bound<'py, PyAny>> {
-        let inner = self.inner.clone();
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let anchor = inner.get_anchor(&anchor_id).await.map_err(to_pyerr)?;
-            Python::with_gil(|py| to_py_object(py, &anchor))
-        })
-    }
-
     /// 解析后的配置。
     fn resolved_config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         to_py_object(py, &self.config)
@@ -497,7 +485,6 @@ fn parse_mode(value: &str) -> PyResult<DidSdkMode> {
     match value.to_ascii_lowercase().as_str() {
         "mock" => Ok(DidSdkMode::Mock),
         "centralized" => Ok(DidSdkMode::Centralized),
-        "chain" => Ok(DidSdkMode::Chain),
         other => Err(PyValueError::new_err(format!("invalid mode: {other}"))),
     }
 }
@@ -513,9 +500,6 @@ fn server_config(participant_did: String, overrides: ConfigOverrides) -> PyResul
     }
     if let Some(endpoint) = overrides.centralized_endpoint {
         config.centralized_endpoint = endpoint;
-    }
-    if let Some(endpoint) = overrides.chain_endpoint {
-        config.chain_endpoint = endpoint;
     }
     if let Some(ttl) = overrides.cache_ttl_secs {
         config.cache_ttl_secs = ttl;
@@ -670,14 +654,6 @@ impl ServerDidSdk {
             Some(record) => to_py_object(py, &record),
             None => Ok(py.None()),
         }
-    }
-
-    fn get_anchor<'py>(&self, py: Python<'py>, anchor_id: String) -> PyResult<Bound<'py, PyAny>> {
-        let inner = self.inner.clone();
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let anchor = inner.get_anchor(&anchor_id).await.map_err(to_pyerr)?;
-            Python::with_gil(|py| to_py_object(py, &anchor))
-        })
     }
 
     /// 本地签名器签名（配置 key_vault 时）。

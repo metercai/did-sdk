@@ -21,15 +21,6 @@ pub enum DidSdkError {
     /// VC 不存在。
     #[error("VC not found: {0}")]
     VcNotFound(String),
-    /// Anchor 不存在。
-    #[error("Anchor not found: {0}")]
-    AnchorNotFound(String),
-    /// Anchor 已撤销。
-    #[error("Anchor revoked: {0}")]
-    AnchorRevoked(String),
-    /// Anchor 已过期。
-    #[error("Anchor expired: {0}")]
-    AnchorExpired(String),
     /// 当前运行模式不支持该 DID 方法。
     #[error("DID method not supported in this mode: {0}")]
     UnsupportedDidMethod(String),
@@ -39,9 +30,9 @@ pub enum DidSdkError {
     /// VC 验证失败。
     #[error("VC verification failed: {0}")]
     VcVerificationFailed(String),
-    /// 链/中心化服务不可用。
-    #[error("Chain unavailable: {0}")]
-    ChainUnavailable(String),
+    /// 后端/存储不可用。
+    #[error("Backend unavailable: {0}")]
+    BackendUnavailable(String),
     /// 参数非法。
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),

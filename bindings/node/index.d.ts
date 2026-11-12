@@ -12,7 +12,6 @@ export interface JsConfigOverrides {
   keyVaultPassword?: string
   keyVaultPasswordFile?: string
   centralizedEndpoint?: string
-  chainEndpoint?: string
   cacheTtlSecs?: number
 }
 /** JS 签名上下文。 */
@@ -35,7 +34,6 @@ export declare class ServerDidSdk {
   removeVc(anchorId: string): Promise<void>
   buildVp(vcs: Array<any>, challenge: string, domain: string): Promise<any>
   resolveDid(did: string): any | null
-  getAnchor(anchorId: string): Promise<any>
   signWithParticipantKey(message: Buffer, context?: JsSigningContext | undefined | null): Promise<Buffer>
   issueSelfAssertedVc(claims: any): Promise<any>
   resolvedConfig(): any
@@ -59,7 +57,6 @@ export declare class DidSdk {
   buildDidSignatureHeader(from: string, anchorId: string, bodyHash: string, rcptHash: string): Promise<string>
   verifyDidSignatureHeader(header: string, from: string, bodyHash: string, rcptHash: string): any
   signIssueAuthorization(subjectDid: string, vcType: string, vcHash: string, timestamp: number): Promise<Buffer>
-  getAnchor(anchorId: string): Promise<any>
   resolvedConfig(): any
   static didSignatureV1Bytes(did: string, from: string, timestamp: number, anchorRef: string, bodyHash: string, rcptHash: string): Buffer
   static issuedVcV1Bytes(issuerDid: string, subjectDid: string, vcType: string, vcHash: string): Buffer

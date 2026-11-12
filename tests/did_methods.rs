@@ -6,13 +6,11 @@
     clippy::field_reassign_with_default
 )]
 
-use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 
 use did_sdk::{
-    AddressStatus, AnchorRecord, ClientConfig, DidMethod, DidSdkMode, MockBackend, PeerNumalgo,
-    Proof, ServerConfig, build_client_sdk, build_server_sdk, build_server_sdk_with_backend,
+    ClientConfig, DidMethod, DidSdkMode, PeerNumalgo, Proof, ServerConfig, build_client_sdk,
+    build_server_sdk,
 };
 use secrecy::SecretString;
 
@@ -109,24 +107,8 @@ async fn server_verifies_client_issued_vc() {
     let vc = client
         .issue_self_asserted_vc(serde_json::json!({"name": "Alice"}))
         .unwrap();
-    let anchor_id = vc.anchor_id.clone().unwrap();
-    let backend = MockBackend::new().with_preloaded_anchors(HashMap::from([(
-        anchor_id.clone(),
-        AnchorRecord {
-            anchor_id,
-            did: vc.issuer.clone(),
-            status: AddressStatus::Active,
-            created_at: 1,
-            updated_at: 1,
-            expires_at: None,
-            payload: serde_json::Value::Null,
-        },
-    )]));
-    let server = build_server_sdk_with_backend(
-        &server_config(dir.path(), "did:web:issuer.example.com"),
-        Arc::new(backend),
-    )
-    .unwrap();
+    let server =
+        build_server_sdk(&server_config(dir.path(), "did:web:issuer.example.com")).unwrap();
     let result = server.verify_vc(&vc).await.unwrap();
     assert!(result.verified, "reason: {:?}", result.reason);
     assert!(result.issuer_resolved);
@@ -140,25 +122,9 @@ async fn server_rejects_tampered_vc() {
     let mut vc = client
         .issue_self_asserted_vc(serde_json::json!({"name": "Alice"}))
         .unwrap();
-    let anchor_id = vc.anchor_id.clone().unwrap();
     vc.credential_subject["name"] = serde_json::json!("Mallory");
-    let backend = MockBackend::new().with_preloaded_anchors(HashMap::from([(
-        anchor_id.clone(),
-        AnchorRecord {
-            anchor_id,
-            did: vc.issuer.clone(),
-            status: AddressStatus::Active,
-            created_at: 1,
-            updated_at: 1,
-            expires_at: None,
-            payload: serde_json::Value::Null,
-        },
-    )]));
-    let server = build_server_sdk_with_backend(
-        &server_config(dir.path(), "did:web:issuer.example.com"),
-        Arc::new(backend),
-    )
-    .unwrap();
+    let server =
+        build_server_sdk(&server_config(dir.path(), "did:web:issuer.example.com")).unwrap();
     let result = server.verify_vc(&vc).await.unwrap();
     assert!(!result.verified);
 }

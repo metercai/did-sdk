@@ -2,7 +2,7 @@
 # 全部字段都有默认值；仅当 DID_SDK_CONFIG_FILE 或 {DID_SDK_HOME}/did-sdk.toml 存在时读取。
 
 [did_sdk]
-mode = "mock"                 # mock / centralized / chain
+mode = "mock"                 # mock / centralized
 subject_kind = "client"       # client / server
 vc_storage_path = "./vc_store"
 cache_ttl_secs = 600
@@ -14,16 +14,9 @@ scheme = "file-keystore"      # file-keystore / memory-keystore
 
 [did_sdk.centralized]
 # endpoint = "http://127.0.0.1:8080"
-
-[did_sdk.chain]
-# endpoint = "ws://127.0.0.1:9944"
-
-# Server 示例（由 chain-sdk / chain-owner-sdk 装配；不配置 key_vault）
+# Server 示例（由 chain-sdk / chain-owner-sdk 装配；默认启用 FileKeystore）
 # [did_sdk]
-# mode = "chain"
+# mode = "centralized"
 # subject_kind = "server"
 # participant_did = "did:web:issuer.example.com:mail"
 # vc_storage_path = "./participant-vc-store"
-#
-# [did_sdk.chain]
-# endpoint = "wss://rpc.example.com:9944"

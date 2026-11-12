@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "did-sdk-server"
 version = "0.1.0"
-description = "DID SDK Server Python binding (Mock/Centralized/Chain modes)"
+description = "DID SDK Server Python binding (Mock/Centralized modes)"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }

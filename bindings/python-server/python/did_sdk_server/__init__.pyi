@@ -19,7 +19,6 @@ class ServerDidSdk:
         key_vault_password: Optional[str] = ...,
         key_vault_password_file: Optional[str] = ...,
         centralized_endpoint: Optional[str] = ...,
-        chain_endpoint: Optional[str] = ...,
         cache_ttl_secs: Optional[int] = ...,
     ) -> None: ...
     @property
@@ -39,7 +38,6 @@ class ServerDidSdk:
         self, vcs: List[Any], challenge: str, domain: str
     ) -> Dict[str, Any]: ...
     def resolve_did(self, did: str) -> Optional[Dict[str, Any]]: ...
-    async def get_anchor(self, anchor_id: str) -> Dict[str, Any]: ...
     async def sign_with_participant_key(
         self,
         message: bytes,

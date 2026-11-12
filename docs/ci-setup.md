@@ -1,6 +1,6 @@
 # GitHub Actions 接入说明
 
-> **状态：已接入（2026-11-12）。** 最新一次代码提交（`2925627`）的 5 个 workflow 全绿（Python/Node 各 10 个双产物 job）；
+> **状态：已接入（2026-11-12）。** 最新一次代码提交（R1 后）的 workflow 结果见 GitHub Actions；Python/Node 各 10 个双产物 job。
 > 运行记录见 [`docs/acceptance-checklist.md`](acceptance-checklist.md) 与 GitHub Actions。
 
 本文档说明如何把本地 `did-sdk` 仓库接入 `metercai/did-sdk`，以及如何验证
@@ -69,19 +69,12 @@ gh repo create metercai/did-sdk --private --source=. --remote=origin --push
 > musl 交叉构建使用 `cargo-zigbuild` + `zig`（workflow 已安装）；
 > Node musl 构建使用 `napi build --zig`。本地不安装这些工具。
 
-## 5. 真实 Chain 集成（可选）
+## 5. Chain 查询边界（R1）
 
-拿到 identity-chain 节点与 pallet 元数据后：
+`did-sdk` 不再提供 Chain 后端、`get_anchor` 或 `subxt` 依赖。真实链/锚定查询由验证方的
+`chain-sdk` 完成；本仓库 CI 只验证 `did-sdk` 的 Mock/Centralized 两后端。
 
-```bash
-export DID_SDK_CHAIN_ENDPOINT=ws://127.0.0.1:9944
-export DID_SDK_CHAIN_PALLET=Identity
-export DID_SDK_CHAIN_ANCHOR_STORAGE=Anchors
-export DID_SDK_CHAIN_DID_STORAGE=Dids
-export DID_SDK_CHAIN_ANCHOR_ID=<anchor id>
-
-cargo test --test consistency chain_anchor_integration -- --ignored --nocapture
-```
+如需在 `chain-sdk` 侧做真实链集成，按其规格书配置节点、pallet 与 metadata。
 
 ## 6. 常见失败
 
