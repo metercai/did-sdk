@@ -11,9 +11,9 @@ DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` �
 
 > **当前状态：已按更新版规格重构；当前版本 [`v0.2.0`](https://github.com/metercai/did-sdk/releases/tag/v0.2.0) 已发布。**
 > `v0.2.0` 包含选择性披露（SD-JWT）与 Client/Server 双产物。
-> - 规范：[`01-DidSdk接口契约与实现规格书.md`](docs/01-DidSdk接口契约与实现规格书.md)
-> - 规范：[`04-keyvault-core_crate规格书.md`](docs/04-keyvault-core_crate规格书.md)
-> - 规范：[`selective-disclosure-interop.md`](docs/selective-disclosure-interop.md)
+> - Spec: [DidSdk Interface Contract](docs/DidSdk-Interface-Contract.md)
+> - Spec: [KeyVaultCore Interface Contract](docs/KeyVaultCore-Interface-Contract.md)
+> - Spec: [Selective Disclosure Interop](docs/selective-disclosure-interop.md)
 
 ---
 

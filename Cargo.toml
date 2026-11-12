@@ -9,7 +9,7 @@ repository = "https://github.com/metercai/did-sdk"
 readme = "README.md"
 
 [workspace]
-# resolver = "3" 启用 MSRV 感知解析。详见 docs/01-DidSdk接口契约与实现规格书.md。
+# resolver = "3" 启用 MSRV 感知解析。详见 docs/DidSdk-Interface-Contract.md。
 resolver = "3"
 members = [".", "keyvault-core", "bindings/python", "bindings/python-server", "bindings/node", "bindings/node-server", "crates/did-sdk-client", "crates/did-sdk-server"]
 default-members = [".", "keyvault-core"]

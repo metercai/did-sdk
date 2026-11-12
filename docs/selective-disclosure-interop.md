@@ -1,29 +1,40 @@
-# 选择性披露（SD-JWT）互操作约定
+# Selective Disclosure Interoperability Contract
 
-本文档固定 `did-sdk` / `keyvault-core` 与 `chain-sdk` 之间的字节级约定，避免两端各自实现产生偏差。
+This document fixes the byte-level contract between `did-sdk` / `keyvault-core` and `chain-sdk`
+for SD-JWT selective disclosure. Both sides must use the same primitives; no independent
+implementations are permitted.
+
+---
 
 ## 1. Disclosure
 
-JSON 数组：
+JSON array:
 
 ```json
 ["<base64url(salt)>", "<claim_name>", <claim_value>]
 ```
 
-- `salt`：16 字节 CSPRNG，base64url 无 padding；
-- `claim_value`：字符串按原样；非字符串按 JSON 序列化。
+- `salt`: 16 bytes from a CSPRNG, base64url without padding;
+- `claim_value`: strings are encoded as their raw UTF-8 bytes; non-strings use JSON serialization.
 
-## 2. `_sd` 哈希
+`Disclosure` lives in `did-sdk`; salt and hash primitives live in `keyvault_core::sd`.
+
+---
+
+## 2. `_sd` Hash
 
 ```text
 H = SHA-256( base64url(salt) || base64url(name) || base64url(value) )
 ```
 
-- `base64url` 无 padding；
-- `H` 以 base64url 写入 `credentialSubject._sd`；
-- `credentialSubject._sd_alg = "sha-256"`。
+- `base64url` has no padding;
+- `_sd` stores `base64url(H)`;
+- `credentialSubject._sd_alg = "sha-256"`;
+- each VC and each attribute has an independent 16-byte salt.
 
-## 3. VP 签名对象 `vp_sd_v1`
+---
+
+## 3. `vp_sd_v1` Signing Input
 
 ```text
 VP-SD-v1
@@ -36,13 +47,17 @@ VP-SD-v1
 ...
 ```
 
-- `vc_hash_i`：完整 VC JSON 的 SHA-256 **hex**；
-- `disclosures_hash`：Disclosures 数组 canonical JSON 的 SHA-256 **hex**；
-- 无尾随换行；`vc_hash` 顺序与 VP `verifiableCredential` 顺序一致。
+- `vc_hash`: SHA-256 **hex** of the full VC JSON;
+- `disclosures_hash`: SHA-256 **hex** of the canonical disclosure array JSON;
+- order of `vc_hash` matches `verifiableCredential`;
+- no trailing newline.
 
-`keyvault_core::signing_input::vp_sd_v1` 是唯一实现，chain-sdk 必须直接调用。
+The only implementation is `keyvault_core::signing_input::vp_sd_v1`; `chain-sdk` must call it
+directly.
 
-## 4. VP 结构
+---
+
+## 4. VP Shape
 
 ```json
 {
@@ -50,23 +65,50 @@ VP-SD-v1
   "verifiableCredential": [ ... ],
   "challenge": "...",
   "domain": "...",
-  "disclosures": [ ["salt","name","value"] ],
-  "proof": { "type": "Ed25519Signature2020", "verificationMethod": "...", "jws": "..." }
+  "disclosures": [ ["salt", "name", "value"] ],
+  "proof": {
+    "type": "Ed25519Signature2020",
+    "verificationMethod": "...",
+    "jws": "..."
+  }
 }
 ```
 
-- `disclosures` 存在（即使为空）时使用 `vp_sd_v1`；
-- 非选择性披露 VP 不带 `disclosures` 字段，使用 `vp_v1` 以兼容旧版。
+- if `disclosures` is present (including `[]`), the holder signs with `vp_sd_v1`;
+- if `disclosures` is absent, the VP is an ordinary VP signed with `vp_v1` for backward
+  compatibility;
+- `proof.jws` is base58btc in the POC, consistent with `did-sdk`.
 
-## 5. 验证顺序
+---
 
-1. 校验 `challenge`；
-2. 校验 holder 对 `vp_sd_v1` 的签名；
-3. 校验每个 VC 的 issuer proof（现有 `VC` 签名）；
-4. 对每条 Disclosure 重算哈希，必须命中某个 VC 的 `_sd`；
-5. 拒绝重复属性名（`disclosure_duplicate`）；
-6. 锚定/撤销由 `chain-sdk` 另行查询（`did-sdk` 不做链上查询）。
+## 5. Verification Order
 
-## 6. 边界
+1. `challenge` equals the expected value;
+2. holder proof verifies over `vp_sd_v1`;
+3. each VC issuer proof verifies (existing VC signature);
+4. each disclosure hash matches an `_sd` entry;
+5. duplicate names are rejected (`disclosure_duplicate`);
+6. unsupported `_sd_alg` is rejected (`sd_alg_unsupported`);
+7. anchor / revocation checks are performed by `chain-sdk` separately; `did-sdk` performs none.
 
-同一 VC 的跨出示可关联、跨验证方合谋拼接属性，是 SD-JWT 的固有边界，见补充附件第 5 章。
+---
+
+## 6. Error Codes
+
+| Code | Meaning |
+|---|---|
+| `disclosure_hash_mismatch` | recomputed hash is not in `_sd` |
+| `disclosure_duplicate` | same attribute disclosed twice |
+| `disclosure_missing` | requested/required disclosure is absent |
+| `sd_alg_unsupported` | `_sd_alg` is not `sha-256` |
+
+---
+
+## 7. Privacy Boundary
+
+SD-JWT prevents hidden-claim disclosure, forged claims, cross-VC linkage (distinct salts) and
+dictionary attacks. It does **not** prevent linkability across presentations of the same VC,
+colluding verifiers reconstructing attributes, or verifier retention of disclosed values.
+
+BBS+ is not part of v0.2.0. Any future upgrade must add a new, explicitly versioned mechanism
+rather than changing `vp_sd_v1`.
