@@ -57,18 +57,18 @@
 
 | 编号 | 验收项 | 状态 | 证据 |
 |---|---|---|---|
-| S1 | Linux musl 完全静态 | ⏳ CI | 需推送 v2 后重跑 `rust-musl.yml` |
+| S1 | Linux musl 完全静态 | ✅ | `rust-musl` run [43205050636](https://github.com/metercai/did-sdk/actions/runs/43205050636)；x86_64/aarch64 `statically linked` + `ldd: not a dynamic executable` |
 | S2 | `UserRejected` 三语言透传 | ✅ | Rust 测试 + Python/Node 映射代码 |
-| S3 | 四平台构建矩阵 | ⏳ CI | 需推送 v2 后重跑 |
+| S3 | 四平台构建矩阵 | ✅ | Rust 4/4、Python 5/5、Node 5/5 全绿；CI `43205050645`、Python `43205050896`、Node `43205050741` |
 
 ## 4. 绑定
 
 | 项 | 状态 | 证据 |
 |---|---|---|
 | Python wheel 构建 | ✅ | 本地 maturin build |
-| Python pytest | ✅ | **8 passed** |
+| Python pytest | ✅ | **9 passed** |
 | Node addon 构建 | ✅ | 本地 napi build |
-| Node vitest | ✅ | **7 passed** |
+| Node vitest | ✅ | **8 passed** |
 | 三语言 golden vector | ✅ | Rust/Python/Node 各自执行 |
 | `.d.ts` 已提交 | ✅ | `bindings/node/index.d.ts` |
 
@@ -77,16 +77,25 @@
 | 套件 | 结果 |
 |---|---|
 | `cargo test -p keyvault-core` | **9 单测 + 16 集成 = 25 passed** |
-| `cargo test -p did-sdk` | **3 单测 + 44 集成 = 47 passed，1 ignored** |
+| `cargo test -p did-sdk` | **3 单测 + 45 集成 = 48 passed，1 ignored** |
 | `cargo fmt --all -- --check` | 通过 |
 | `cargo clippy --workspace --all-targets -- -D warnings` | 通过 |
-| Python `pytest` | **8 passed** |
-| Node `vitest` | **7 passed** |
+| Python `pytest` | **9 passed** |
+| Node `vitest` | **8 passed** |
 
-## 6. 待外部条件
+## 6. GitHub Actions（v2 代码提交 `57f6dc6`）
+
+| workflow | run | 结果 |
+|---|---|---|
+| `ci` | [43205050645](https://github.com/metercai/did-sdk/actions/runs/43205050645) | success |
+| `rust-musl` | [43205050636](https://github.com/metercai/did-sdk/actions/runs/43205050636) | 4/4 success |
+| `python` | [43205050896](https://github.com/metercai/did-sdk/actions/runs/43205050896) | 5/5 success |
+| `node` | [43205050741](https://github.com/metercai/did-sdk/actions/runs/43205050741) | 5/5 success |
+| `cross-lang` | [43205050782](https://github.com/metercai/did-sdk/actions/runs/43205050782) | success |
+
+## 7. 待外部条件
 
 | 项 | 原因 |
 |---|---|
-| S1/S3 CI | 本次重构后需重新推送并跑 Actions |
 | 真实 Chain | 无 identity-chain 节点 / pallet 元数据 |
 | 发布 | crates.io / PyPI / npm 未发布 |

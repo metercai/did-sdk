@@ -5,7 +5,7 @@
 | 日期 | 2026-11-12 |
 | 规格 | `01-DidSdk接口契约与实现规格书1.md`、`04-keyvault-core_crate规格书1.md` |
 | 范围 | keyvault-core namespace 隔离、DidSdk<Client/Server>、三种 DID 方法、VC 钱包、绑定与测试 |
-| 结论 | 代码与本地测试完成；GitHub Actions 需在推送后重跑 |
+| 结论 | v2 代码与本地测试完成；GitHub Actions 全绿（提交 `57f6dc6`） |
 
 ---
 
@@ -55,15 +55,32 @@ DidSdk<Server> ── vault: None ───────────────�
 6. keyvault-core 文件格式 v1 → v2（`.enc`，namespace 子目录），旧 keystore 不兼容；
 7. 字符串签名格式保持向后兼容（原有 3 个签名输入格式不变）。
 
-## 4. 本地验证
+## 4. GitHub Actions（v2 提交 `57f6dc6`）
+
+| workflow | run | 结果 |
+|---|---|---|
+| `ci` | [43205050645](https://github.com/metercai/did-sdk/actions/runs/43205050645) | success |
+| `rust-musl` | [43205050636](https://github.com/metercai/did-sdk/actions/runs/43205050636) | 4/4 success |
+| `python` | [43205050896](https://github.com/metercai/did-sdk/actions/runs/43205050896) | 5/5 success |
+| `node` | [43205050741](https://github.com/metercai/did-sdk/actions/runs/43205050741) | 5/5 success |
+| `cross-lang` | [43205050782](https://github.com/metercai/did-sdk/actions/runs/43205050782) | success |
+
+musl 静态日志：
+
+```text
+x86_64:  statically linked, stripped / OK: static / ldd: not a dynamic executable
+aarch64: statically linked, stripped / OK: static / ldd: not a dynamic executable
+```
+
+## 5. 本地验证
 
 ```text
 cargo test -p keyvault-core           # 9 unit + 16 integration = 25 passed
-cargo test -p did-sdk                 # 3 unit + 44 integration = 47 passed, 1 ignored
+cargo test -p did-sdk                 # 3 unit + 45 integration = 48 passed, 1 ignored
 cargo fmt --all -- --check            # passed
 cargo clippy --workspace --all-targets -- -D warnings  # passed
-pytest bindings/python/tests          # 8 passed
-npm test (bindings/node)              # 7 passed
+pytest bindings/python/tests          # 9 passed
+npm test (bindings/node)              # 8 passed
 ```
 
 覆盖：
@@ -77,12 +94,11 @@ npm test (bindings/node)              # 7 passed
 - Mock 自动拒绝/延迟、handler 拒绝、Centralized 只读、三后端一致性；
 - Python/Node 同组向量与异步 API。
 
-## 5. 待外部条件
+## 6. 待外部条件
 
-1. **GitHub Actions 重跑**：推送 v2 后重新验证四/五平台构建与 musl 静态；
-2. **真实 chain**：仍缺 identity-chain 节点与 pallet 元数据；
-3. **发布**：未发布 crates.io / PyPI / npm；
-4. **did:peer 生产编码**：POC 使用简化 `0/2` 内嵌公钥、`1` 文档哈希 + 本地文档；
+1. **真实 chain**：仍缺 identity-chain 节点与 pallet 元数据；
+2. **发布**：未发布 crates.io / PyPI / npm；
+3. **did:peer 生产编码**：POC 使用简化 `0/2` 内嵌公钥、`1` 文档哈希 + 本地文档；
    对接其他 did:peer 实现时需对齐编码。
-5. **Server VC 存储加密**：POC 使用 `vc_storage_path` 明文 JSON；
+4. **Server VC 存储加密**：POC 使用 `vc_storage_path` 明文 JSON；
    规格要求由 KeyVault 或注入存储密钥派生加密，后续接入。

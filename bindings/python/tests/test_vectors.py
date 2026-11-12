@@ -52,6 +52,15 @@ def test_vp_v1_bytes():
         assert out.decode() == case["expected_bytes_utf8"]
 
 
+def test_gateway_access_v1_bytes():
+    for case in VECTORS["gateway_access_v1"]:
+        data = case["input"]
+        out = DidSdk.gateway_access_v1_bytes(
+            data["did"], data["agent_email"], data["challenge"]
+        )
+        assert out.decode() == case["expected_bytes_utf8"]
+
+
 def test_governance_signing_inputs():
     out = DidSdk.participant_registration_v1_bytes(
         7,

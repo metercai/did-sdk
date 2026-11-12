@@ -175,3 +175,20 @@ fn governance_signing_inputs() {
         );
     }
 }
+
+#[test]
+fn gateway_access_v1_bytes() {
+    let json = vectors();
+    for case in json["gateway_access_v1"].as_array().expect("array") {
+        let input = &case["input"];
+        let bytes = keyvault_core::signing_input::gateway_access_v1(
+            input["did"].as_str().unwrap(),
+            input["agent_email"].as_str().unwrap(),
+            input["challenge"].as_str().unwrap(),
+        );
+        assert_eq!(
+            String::from_utf8(bytes).unwrap(),
+            case["expected_bytes_utf8"].as_str().unwrap()
+        );
+    }
+}

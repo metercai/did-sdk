@@ -65,6 +65,18 @@ describe("golden vectors", () => {
     }
   });
 
+  test("gateway_access_v1", () => {
+    for (const vector of VECTORS.gateway_access_v1) {
+      const input = vector.input;
+      const output = DidSdk.gatewayAccessV1Bytes(
+        input.did,
+        input.agent_email,
+        input.challenge
+      );
+      expect(output.toString("utf8")).toBe(vector.expected_bytes_utf8);
+    }
+  });
+
   test("governance signing inputs", () => {
     expect(
       DidSdk.participantRegistrationV1Bytes(

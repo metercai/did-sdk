@@ -45,6 +45,7 @@ export declare class DidSdk {
   static didSignatureV1Bytes(did: string, from: string, timestamp: number, anchorRef: string, bodyHash: string, rcptHash: string): Buffer
   static issuedVcV1Bytes(issuerDid: string, subjectDid: string, vcType: string, vcHash: string): Buffer
   static vpV1Bytes(holder: string, challenge: string, domain: string, vcHashes: Array<string>): Buffer
+  static gatewayAccessV1Bytes(did: string, agentEmail: string, challenge: string): Buffer
   static participantRegistrationV1Bytes(participantId: number, controllerDid: string, operator: string, chainRole: string, businessTypes: Array<string>, authorizedDomains: Array<string>): Buffer
   static operatorRotationV1Bytes(participantId: number, newOperator: string, timestamp: number): Buffer
   static controllerDidRotationV1Bytes(participantId: number, newControllerDid: string, timestamp: number): Buffer

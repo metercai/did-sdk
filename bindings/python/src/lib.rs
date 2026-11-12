@@ -384,6 +384,19 @@ impl DidSdk {
     }
 
     #[staticmethod]
+    fn gateway_access_v1_bytes(
+        py: Python<'_>,
+        did: &str,
+        agent_email: &str,
+        challenge: &str,
+    ) -> Py<PyBytes> {
+        bytes(
+            py,
+            keyvault_core::signing_input::gateway_access_v1(did, agent_email, challenge),
+        )
+    }
+
+    #[staticmethod]
     #[pyo3(signature = (participant_id, controller_did, operator, chain_role, business_types, authorized_domains))]
     fn participant_registration_v1_bytes(
         py: Python<'_>,

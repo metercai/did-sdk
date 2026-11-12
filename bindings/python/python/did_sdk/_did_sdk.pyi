@@ -72,6 +72,10 @@ class DidSdk:
         holder: str, challenge: str, domain: str, vc_hashes: List[str]
     ) -> bytes: ...
     @staticmethod
+    def gateway_access_v1_bytes(
+        did: str, agent_email: str, challenge: str
+    ) -> bytes: ...
+    @staticmethod
     def participant_registration_v1_bytes(
         participant_id: int,
         controller_did: str,

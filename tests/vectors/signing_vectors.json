@@ -94,5 +94,15 @@
       },
       "expected_bytes_utf8": "DelegationAuthorization-v1\nh\ndid:key:z\nop\n9"
     }
+  ],
+  "gateway_access_v1": [
+    {
+      "input": {
+        "did": "did:key:z6MkAgent",
+        "agent_email": "agent@example.com",
+        "challenge": "challenge-123"
+      },
+      "expected_bytes_utf8": "GatewayAccess-v1\ndid:key:z6MkAgent\nagent@example.com\nchallenge-123"
+    }
   ]
 }

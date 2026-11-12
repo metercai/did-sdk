@@ -322,6 +322,15 @@ impl DidSdk {
         ))
     }
 
+    #[napi(js_name = "gatewayAccessV1Bytes")]
+    pub fn gateway_access_v1_bytes(did: String, agent_email: String, challenge: String) -> Buffer {
+        Buffer::from(keyvault_core::signing_input::gateway_access_v1(
+            &did,
+            &agent_email,
+            &challenge,
+        ))
+    }
+
     #[napi(js_name = "participantRegistrationV1Bytes")]
     pub fn participant_registration_v1_bytes(
         participant_id: u32,
