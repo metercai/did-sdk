@@ -30,7 +30,10 @@
         "holder": "did:key:z6MkHolder",
         "challenge": "challenge-123",
         "domain": "example.com",
-        "vc_hashes": ["hash-1", "hash-2"]
+        "vc_hashes": [
+          "hash-1",
+          "hash-2"
+        ]
       },
       "expected_bytes_utf8": "VP-v1\ndid:key:z6MkHolder\nchallenge-123\nexample.com\nhash-1\nhash-2"
     }
@@ -41,6 +44,55 @@
       "seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
       "payload_utf8": "hello did-sdk",
       "expected_signature_hex": "6087965f286078d9c25f39a05d5fabc2492a6f0524f12efabb53e7e057c959ebe01d16d83abb2d2cb26cf540a65612986783e6449ec67280c5dd9ff6c77e1300"
+    }
+  ],
+  "participant_registration_v1": [
+    {
+      "input": {
+        "participant_id": 7,
+        "controller_did": "did:web:issuer.example.com",
+        "operator": "5Operator",
+        "chain_role": "Issuer",
+        "business_types": [
+          "EmailGateway",
+          "Warrant"
+        ],
+        "authorized_domains": [
+          "example.com"
+        ]
+      },
+      "expected_bytes_utf8": "ParticipantRegistration-v1\n7\ndid:web:issuer.example.com\n5Operator\nIssuer\nEmailGateway,Warrant\nexample.com"
+    }
+  ],
+  "operator_rotation_v1": [
+    {
+      "input": {
+        "participant_id": 7,
+        "new_operator": "5New",
+        "timestamp": 9
+      },
+      "expected_bytes_utf8": "OperatorRotation-v1\n7\n5New\n9"
+    }
+  ],
+  "controller_did_rotation_v1": [
+    {
+      "input": {
+        "participant_id": 7,
+        "new_controller_did": "did:web:new",
+        "timestamp": 9
+      },
+      "expected_bytes_utf8": "ControllerDidRotation-v1\n7\ndid:web:new\n9"
+    }
+  ],
+  "delegation_authorization_v1": [
+    {
+      "input": {
+        "vc_hash": "h",
+        "delegate_did": "did:key:z",
+        "delegate_operator": "op",
+        "timestamp": 9
+      },
+      "expected_bytes_utf8": "DelegationAuthorization-v1\nh\ndid:key:z\nop\n9"
     }
   ]
 }

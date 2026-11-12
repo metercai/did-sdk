@@ -1,25 +1,25 @@
-//! `index.json` 的读写与校验。
-//!
-//! 索引只包含公开元数据（key_id、类型、文件名、创建时间），不含任何私钥材料。
+//! `index.json` 的读写与校验（v2，含 namespace/algorithm）。
 
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::KeyVaultError;
 use crate::fsutil::atomic_write;
+use crate::{KeyAlgorithm, KeyNamespace, KeyVaultError};
 
 /// 索引格式版本。
-pub const INDEX_VERSION: u8 = 1;
+pub const INDEX_VERSION: u8 = 2;
 
 /// 单条密钥索引。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct KeyEntry {
-    /// `did:key` 形式的 key 标识。
+    /// 带 namespace 前缀的 KeyId。
     pub key_id: String,
-    /// 密钥类型字节（0x01 Ed25519 / 0x02 Sr25519）。
-    pub key_type: u8,
-    /// 密钥文件名（`<64 hex>.kvlt`）。
+    /// namespace。
+    pub namespace: KeyNamespace,
+    /// algorithm。
+    pub algorithm: KeyAlgorithm,
+    /// 密钥文件名（位于 namespace 子目录下，以 `.enc` 结尾）。
     pub file: String,
     /// 创建时间（Unix 秒）。
     pub created_at: u64,
@@ -62,7 +62,7 @@ impl KeyIndex {
         }
     }
 
-    /// 删除条目，返回是否删除成功。
+    /// 删除条目。
     pub fn remove(&mut self, key_id: &str) -> bool {
         let before = self.keys.len();
         self.keys.retain(|entry| entry.key_id != key_id);
@@ -72,23 +72,25 @@ impl KeyIndex {
 
 /// 校验密钥文件名，防止目录穿越与非法字符。
 pub fn is_valid_key_file_name(name: &str) -> bool {
-    let Some(stem) = name.strip_suffix(".kvlt") else {
+    let Some(stem) = name.strip_suffix(".enc") else {
         return false;
     };
-    stem.len() == 64
+    !stem.is_empty()
+        && !stem.starts_with('.')
+        && !stem.contains("..")
         && stem
             .bytes()
-            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
 }
 
-/// 从磁盘加载索引。文件不存在时返回空索引；损坏时返回错误。
+/// 从磁盘加载索引。文件不存在时返回空索引。
 pub fn load(path: &Path) -> Result<KeyIndex, KeyVaultError> {
     if !path.exists() {
         return Ok(KeyIndex::default());
     }
     let raw = std::fs::read(path)?;
     let index: KeyIndex = serde_json::from_slice(&raw)
-        .map_err(|e| KeyVaultError::InvalidKeyFormat(format!("invalid index.json: {e}")))?;
+        .map_err(|error| KeyVaultError::InvalidKeyFormat(format!("invalid index.json: {error}")))?;
     if index.version != INDEX_VERSION {
         return Err(KeyVaultError::InvalidKeyFormat(format!(
             "unsupported index version: {}",
@@ -101,6 +103,20 @@ pub fn load(path: &Path) -> Result<KeyIndex, KeyVaultError> {
                 "invalid key file name in index: {}",
                 entry.file
             )));
+        }
+        let actual = entry
+            .key_id
+            .strip_prefix(entry.namespace.prefix())
+            .ok_or_else(|| {
+                KeyVaultError::InvalidKeyFormat(format!(
+                    "key_id {} does not match namespace {:?}",
+                    entry.key_id, entry.namespace
+                ))
+            })?;
+        if actual.is_empty() {
+            return Err(KeyVaultError::InvalidKeyFormat(
+                "empty local id in key index".into(),
+            ));
         }
     }
     Ok(index)

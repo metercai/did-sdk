@@ -77,6 +77,87 @@ pub fn vp_v1(holder: &str, challenge: &str, domain: &str, vc_hashes: &[String]) 
     out.into_bytes()
 }
 
+/// 参与方注册绑定声明（服务端 ChainOwner 治理）。
+///
+/// 格式（POC 约定；字段顺序与 `ParticipantRecord` 一致）：
+/// ```text
+/// ParticipantRegistration-v1
+/// {participant_id}
+/// {controller_did}
+/// {operator}
+/// {chain_role}
+/// {business_types joined by ","}
+/// {authorized_domains joined by ","}
+/// ```
+pub fn participant_registration_v1(
+    participant_id: u32,
+    controller_did: &str,
+    operator: &str,
+    chain_role: &str,
+    business_types: &[String],
+    authorized_domains: &[String],
+) -> Vec<u8> {
+    format!(
+        "ParticipantRegistration-v1\n{participant_id}\n{controller_did}\n{operator}\n{chain_role}\n{}\n{}",
+        business_types.join(","),
+        authorized_domains.join(",")
+    )
+    .into_bytes()
+}
+
+/// operator 轮换声明。
+///
+/// 格式：
+/// ```text
+/// OperatorRotation-v1
+/// {participant_id}
+/// {new_operator}
+/// {timestamp}
+/// ```
+pub fn operator_rotation_v1(participant_id: u32, new_operator: &str, timestamp: u64) -> Vec<u8> {
+    format!("OperatorRotation-v1\n{participant_id}\n{new_operator}\n{timestamp}").into_bytes()
+}
+
+/// controller_did 轮换声明。
+///
+/// 格式：
+/// ```text
+/// ControllerDidRotation-v1
+/// {participant_id}
+/// {new_controller_did}
+/// {timestamp}
+/// ```
+pub fn controller_did_rotation_v1(
+    participant_id: u32,
+    new_controller_did: &str,
+    timestamp: u64,
+) -> Vec<u8> {
+    format!("ControllerDidRotation-v1\n{participant_id}\n{new_controller_did}\n{timestamp}")
+        .into_bytes()
+}
+
+/// 委托锚定授权声明（路径三，用户 A 签）。
+///
+/// 格式：
+/// ```text
+/// DelegationAuthorization-v1
+/// {vc_hash}
+/// {delegate_did}
+/// {delegate_operator}
+/// {timestamp}
+/// ```
+pub fn delegation_authorization_v1(
+    vc_hash: &str,
+    delegate_did: &str,
+    delegate_operator: &str,
+    timestamp: u64,
+) -> Vec<u8> {
+    format!(
+        "DelegationAuthorization-v1\n{vc_hash}\n{delegate_did}\n{delegate_operator}\n{timestamp}"
+    )
+    .into_bytes()
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
@@ -87,6 +168,34 @@ mod tests {
         let bytes = did_signature_v1("d", "f", 1, "a", "b", "c");
         assert!(!bytes.ends_with(b"\n"));
         assert_eq!(String::from_utf8(bytes).unwrap().lines().count(), 7);
+    }
+
+    #[test]
+    fn governance_inputs_have_stable_layout() {
+        let registration = participant_registration_v1(
+            7,
+            "did:web:issuer.example.com",
+            "5GrwvaEF5zXb26Fz9rcQpDWSZ",
+            "Issuer",
+            &["EmailGateway".into(), "Warrant".into()],
+            &["example.com".into()],
+        );
+        assert_eq!(
+            String::from_utf8(registration).unwrap(),
+            "ParticipantRegistration-v1\n7\ndid:web:issuer.example.com\n5GrwvaEF5zXb26Fz9rcQpDWSZ\nIssuer\nEmailGateway,Warrant\nexample.com"
+        );
+        assert_eq!(
+            String::from_utf8(operator_rotation_v1(7, "5New", 9)).unwrap(),
+            "OperatorRotation-v1\n7\n5New\n9"
+        );
+        assert_eq!(
+            String::from_utf8(controller_did_rotation_v1(7, "did:web:new", 9)).unwrap(),
+            "ControllerDidRotation-v1\n7\ndid:web:new\n9"
+        );
+        assert_eq!(
+            String::from_utf8(delegation_authorization_v1("h", "did:key:z", "op", 9)).unwrap(),
+            "DelegationAuthorization-v1\nh\ndid:key:z\nop\n9"
+        );
     }
 
     #[test]

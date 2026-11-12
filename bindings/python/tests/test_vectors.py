@@ -1,4 +1,4 @@
-"""Python 绑定测试：golden vector、异步 roundtrip、异常与配置。"""
+"""Python 绑定测试：向量、DID 方法、异步 roundtrip。"""
 
 import asyncio
 import json
@@ -52,6 +52,30 @@ def test_vp_v1_bytes():
         assert out.decode() == case["expected_bytes_utf8"]
 
 
+def test_governance_signing_inputs():
+    out = DidSdk.participant_registration_v1_bytes(
+        7,
+        "did:web:issuer.example.com",
+        "5Operator",
+        "Issuer",
+        ["EmailGateway", "Warrant"],
+        ["example.com"],
+    )
+    assert out.decode() == (
+        "ParticipantRegistration-v1\n7\ndid:web:issuer.example.com\n"
+        "5Operator\nIssuer\nEmailGateway,Warrant\nexample.com"
+    )
+    assert DidSdk.operator_rotation_v1_bytes(7, "5New", 9).decode() == (
+        "OperatorRotation-v1\n7\n5New\n9"
+    )
+    assert DidSdk.controller_did_rotation_v1_bytes(7, "did:web:new", 9).decode() == (
+        "ControllerDidRotation-v1\n7\ndid:web:new\n9"
+    )
+    assert DidSdk.delegation_authorization_v1_bytes("h", "did:key:z", "op", 9).decode() == (
+        "DelegationAuthorization-v1\nh\ndid:key:z\nop\n9"
+    )
+
+
 def test_fixed_seed_signature():
     for case in VECTORS["fixed_seed_signature"]:
         out = DidSdk.ed25519_sign_with_seed(
@@ -78,15 +102,19 @@ def test_async_roundtrip():
 
             did = await sdk.generate_did_key()
             assert did.startswith("did:key:z")
-            public_key = sdk.resolve_did_key(did)
-            assert len(public_key) == 32
+            assert len(sdk.resolve_did_key(did)) == 32
+
+            peer = await sdk.generate_did_peer("0")
+            assert peer.startswith("did:peer:0")
+            assert sdk.resolve_did_peer(peer)["id"] == peer
 
             signature = await sdk.sign_with_did_key(b"hello", purpose="test")
             assert len(signature) == 64
 
             record = await sdk.create_did()
             assert record["did"].startswith("did:key:z")
-            assert (await sdk.resolve_did(record["did"]))["did"] == record["did"]
+            assert record["method"] == "key"
+            assert sdk.resolve_did(record["did"])["did"] == record["did"]
 
             vc = await sdk.issue_self_asserted_vc(
                 {"name": "Alice", "type": "TestCredential"}
@@ -101,7 +129,7 @@ def test_async_roundtrip():
 
             vp = await sdk.build_vp([vc], "challenge-1", "example.com")
             assert vp["holder"] == record["did"]
-            assert vp["proof"]["proofValue"]
+            assert vp["proof"]["jws"]
 
             header = await sdk.build_did_signature_header(
                 "alice@example.com", "anchor:abc", "body-hash", "rcpt-hash"
@@ -109,12 +137,12 @@ def test_async_roundtrip():
             result = sdk.verify_did_signature_header(
                 header, "alice@example.com", "body-hash", "rcpt-hash"
             )
-            assert result["valid"] is True
+            assert result["verified"] is True
 
             auth = await sdk.sign_issue_authorization(
                 record["did"], "TestCredential", "vc-hash", 1700000000
             )
-            assert auth["issuer_did"] == record["did"]
+            assert len(auth) == 64
 
             await sdk.remove_vc(anchor_id)
             assert await sdk.get_vc(anchor_id) is None

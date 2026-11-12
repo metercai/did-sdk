@@ -1,18 +1,15 @@
-//! 公开数据模型。
-//!
-//! 所有类型都派生 `Serialize + Deserialize + Clone + Debug`；绑定层直接复用
-//! 这些 JSON 形状，避免三语言各写一套。
+//! 公开数据模型（更新版规格：Client/Server + 三种 DID 方法）。
 
 use serde::{Deserialize, Serialize};
 
-/// 签名上下文，用于审计/UI 提示；不参与待签名字节。
+/// 签名上下文。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SigningContext {
-    /// 签名目的（例如 `login` / `issue-vc`）。
+    /// 签名目的。
     pub purpose: String,
-    /// 载荷摘要，用于 UI 展示。
+    /// 载荷摘要。
     pub payload_summary: String,
-    /// 请求方标识（可选）。
+    /// 请求方。
     pub requestor: Option<String>,
 }
 
@@ -25,6 +22,103 @@ pub struct Signature(pub Vec<u8>);
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct Ed25519PublicKey(pub [u8; 32]);
+
+/// 签发授权签名（裸签名字节）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct IssueAuthorizationSignature(pub Vec<u8>);
+
+/// DID 方法。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DidMethod {
+    /// did:key。
+    Key,
+    /// did:peer。
+    Peer,
+    /// did:web。
+    Web,
+}
+
+/// did:peer numalgo。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PeerNumalgo {
+    /// numalgo 0。
+    Zero,
+    /// numalgo 1。
+    One,
+    /// numalgo 2。
+    Two,
+}
+
+/// DID 记录。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DidRecord {
+    /// DID 字符串。
+    pub did: String,
+    /// DID 方法。
+    pub method: DidMethod,
+    /// 文档哈希；did:key/peer:0/2 为 None，did:web/peer:1 可有值。
+    pub doc_hash: Option<String>,
+    /// owner DID。
+    pub owner: Option<String>,
+    /// 链上区块号（若适用）。
+    pub block_number: Option<u64>,
+}
+
+/// DID 文档（W3C 精简子集）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct DidDocument {
+    /// 文档 id。
+    pub id: String,
+    /// 别名。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub also_known_as: Vec<String>,
+    /// 验证方法。
+    #[serde(default)]
+    pub verification_method: Vec<VerificationMethod>,
+    /// 认证引用。
+    #[serde(default)]
+    pub authentication: Vec<String>,
+    /// 断言引用。
+    #[serde(default)]
+    pub assertion_method: Vec<String>,
+    /// 服务端点。
+    #[serde(default)]
+    pub service: Vec<Service>,
+}
+
+/// DID 文档验证方法。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VerificationMethod {
+    /// 方法 id。
+    pub id: String,
+    /// 类型。
+    #[serde(rename = "type")]
+    pub type_: String,
+    /// controller。
+    pub controller: String,
+    /// 公钥 multibase。
+    #[serde(rename = "publicKeyMultibase", skip_serializing_if = "Option::is_none")]
+    pub public_key_multibase: Option<String>,
+    /// 公钥 JWK。
+    #[serde(rename = "publicKeyJwk", skip_serializing_if = "Option::is_none")]
+    pub public_key_jwk: Option<serde_json::Value>,
+}
+
+/// DID 文档服务端点。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Service {
+    /// 服务 id。
+    pub id: String,
+    /// 服务类型。
+    #[serde(rename = "type")]
+    pub type_: String,
+    /// 端点。
+    #[serde(rename = "serviceEndpoint")]
+    pub service_endpoint: serde_json::Value,
+}
 
 /// DID/Anchor 状态。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -44,9 +138,9 @@ pub enum AddressStatus {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum IntegrityStatus {
-    /// 签名有效。
+    /// 有效。
     Valid,
-    /// 签名无效。
+    /// 无效。
     Invalid,
     /// 已撤销。
     Revoked,
@@ -56,58 +150,50 @@ pub enum IntegrityStatus {
     Unknown,
 }
 
-/// DID 记录。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DidRecord {
-    /// DID 字符串（POC 为 `did:key:z...`）。
-    pub did: String,
-    /// Ed25519 公钥。
-    pub public_key: Ed25519PublicKey,
-    /// 创建时间（Unix 秒）。
-    pub created_at: u64,
-    /// 更新时间（Unix 秒）。
-    pub updated_at: u64,
-    /// 关联的 anchor（若已锚定）。
-    pub anchor_id: Option<String>,
-    /// 状态。
-    pub status: AddressStatus,
-}
-
 /// DID-Signature 验证结果。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VerifyResult {
-    /// 是否有效。
-    pub valid: bool,
-    /// 完整性状态。
+    /// 是否通过。
+    pub verified: bool,
+    /// 完整性。
     pub integrity: IntegrityStatus,
-    /// 被验证的 DID（解析成功时）。
-    pub did: Option<String>,
-    /// header 中的时间戳。
-    pub timestamp: Option<u64>,
-    /// 失败原因（成功时为 `None`）。
+    /// 地址状态。
+    pub address: AddressStatus,
+    /// 失败原因。
     pub reason: Option<String>,
 }
 
-/// VC/VP 的 proof。
+/// VC 验证结果。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct VcProof {
-    /// proof 类型。
-    #[serde(rename = "type")]
-    pub proof_type: String,
-    /// 创建时间（RFC3339）。
-    pub created: String,
-    /// 验证方法（`did#key-1`）。
-    #[serde(rename = "verificationMethod")]
-    pub verification_method: String,
-    /// proof 目的。
-    #[serde(rename = "proofPurpose")]
-    pub proof_purpose: String,
-    /// base58btc 编码的签名。
-    #[serde(rename = "proofValue")]
-    pub proof_value: String,
+pub struct VcVerificationResult {
+    /// 是否通过。
+    pub verified: bool,
+    /// issuer DID 是否解析成功。
+    pub issuer_resolved: bool,
+    /// issuer 是否已注册/锚定。
+    pub issuer_registered: bool,
+    /// anchor 是否有效。
+    pub anchor_valid: bool,
+    /// 失败原因。
+    pub reason: Option<String>,
 }
 
-/// W3C 风格的 Verifiable Credential。
+/// VC/VP proof（外部 Signer 注入）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Proof {
+    /// proof 类型。
+    #[serde(rename = "type")]
+    pub type_: String,
+    /// 创建时间（Unix 秒）。
+    pub created: u64,
+    /// 验证方法。
+    #[serde(rename = "verificationMethod")]
+    pub verification_method: String,
+    /// JWS/签名字符串（POC 使用 base58btc 编码的裸签名）。
+    pub jws: String,
+}
+
+/// W3C 风格 Verifiable Credential。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VerifiableCredential {
     /// JSON-LD context。
@@ -131,7 +217,7 @@ pub struct VerifiableCredential {
     pub credential_subject: serde_json::Value,
     /// proof。
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub proof: Option<VcProof>,
+    pub proof: Option<Proof>,
     /// 本地存储锚点 id。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub anchor_id: Option<String>,
@@ -148,16 +234,16 @@ pub struct VerifiablePresentation {
     pub types: Vec<String>,
     /// holder DID。
     pub holder: String,
-    /// 出示的 VC。
+    /// VC。
     #[serde(rename = "verifiableCredential")]
     pub verifiable_credential: Vec<VerifiableCredential>,
-    /// 挑战值。
+    /// challenge。
     pub challenge: String,
-    /// 域名。
+    /// domain。
     pub domain: String,
     /// proof。
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub proof: Option<VcProof>,
+    pub proof: Option<Proof>,
 }
 
 /// Anchor 记录。
@@ -175,38 +261,20 @@ pub struct AnchorRecord {
     pub updated_at: u64,
     /// 过期时间（Unix 秒）。
     pub expires_at: Option<u64>,
-    /// 链/中心化服务返回的附加字段。
+    /// 附加字段。
     #[serde(default)]
     pub payload: serde_json::Value,
 }
 
-/// 签发授权签名。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct IssueAuthorizationSignature {
-    /// 签发者 DID。
-    pub issuer_did: String,
-    /// 主体 DID。
-    pub subject_did: String,
-    /// VC 类型。
-    pub vc_type: String,
-    /// VC hash。
-    pub vc_hash: String,
-    /// 时间戳（Unix 秒）。
-    pub timestamp: u64,
-    /// base58btc 编码的 Ed25519 签名。
-    pub signature: String,
-}
-
 impl DidRecord {
-    /// 由 DID 与公钥构造一个 active 记录。
-    pub fn new_active(did: String, public_key: Ed25519PublicKey, timestamp: u64) -> Self {
+    /// 由 DID 构造记录。
+    pub fn new(did: String, method: DidMethod) -> Self {
         Self {
             did,
-            public_key,
-            created_at: timestamp,
-            updated_at: timestamp,
-            anchor_id: None,
-            status: AddressStatus::Active,
+            method,
+            doc_hash: None,
+            owner: None,
+            block_number: None,
         }
     }
 }

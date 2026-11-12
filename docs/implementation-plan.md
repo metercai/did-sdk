@@ -10,6 +10,19 @@
 | 初始化基线 | 本仓库 `main` 分支初始提交（见 §2） |
 | 评审入口 | §4 关键决策、§11 确认清单 |
 
+> **2026-11-12 v2 规格更新（重要）**
+>
+> 上游 `01-DidSdk接口契约与实现规格书1.md` 与 `04-keyvault-core_crate规格书1.md` 已更新为：
+> `DidSdk<Client>` / `DidSdk<Server>` 类型参数、三种 DID 方法、namespace + algorithm
+> 隔离、SS58、7 个签名输入、Server proof 注入与 `verify_vc`。
+> 本文件 §3–§15 中关于旧 `dyn DidSdk` / 三模式 trait / 旧 `DidRecord` 的描述已被 v2
+> 取代；最新实现与验收以 [`README.md`](../README.md)、
+> [`docs/implementation-report.md`](implementation-report.md)、
+> [`docs/acceptance-checklist.md`](acceptance-checklist.md) 为准。
+>
+> 主要破坏性变化：`DidRecord`、`VerifyResult`、`IssueAuthorizationSignature`、
+> `Proof`、`KeyId` namespace 前缀、FileKeystore v2（`.enc`）均已变更。
+
 > 阅读顺序建议：先看 §3（架构）与 §4（需要拍板的差异），再看 §5（分阶段步骤）
 > 和 §10（风险）。§12–§14 是可直接执行的契约附录。
 >

@@ -20,4 +20,6 @@ pub use file_keystore::{
     password::{PasswordSource, resolve_password},
 };
 pub use memory_keystore::MemoryKeystore;
-pub use trait_::{KeyId, KeyVault, KeyVaultError, Keypair, PublicKey, Signature};
+pub use trait_::{
+    KeyAlgorithm, KeyId, KeyNamespace, KeyVault, KeyVaultError, Keypair, PublicKey, Signature,
+};

@@ -1,67 +1,69 @@
-//! 服务端请求的用户确认回调。
-//!
-//! 应用可实现该 trait 接入 UI / 生物识别 / 设备安全区。返回
-//! [`crate::DidSdkError::UserRejected`] 表示用户拒绝；返回 `Timeout` 表示确认超时。
+//! 客户端交互式确认回调（仅 Client 模式）。
 
 use async_trait::async_trait;
 
 use crate::DidSdkError;
 
-/// 构造 DID-Signature header 前的确认上下文。
-#[derive(Debug, Clone)]
-pub struct ChallengeContext {
-    /// 签名者 DID。
-    pub did: String,
-    /// 请求方（email/agent 标识）。
-    pub from: String,
-    /// anchor 引用。
-    pub anchor_id: String,
-    /// body hash。
-    pub body_hash: String,
-    /// receipt hash。
-    pub rcpt_hash: String,
+/// 签名确认响应。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignatureResponse {
+    /// 用户是否同意。
+    pub approved: bool,
+    /// 拒绝原因。
+    pub reason: Option<String>,
 }
 
-/// 构造 VP 前的确认上下文。
-#[derive(Debug, Clone)]
-pub struct VpRequestContext {
-    /// holder DID。
-    pub holder: String,
-    /// challenge。
-    pub challenge: String,
-    /// domain。
-    pub domain: String,
-    /// 待出示 VC 的 anchor id。
-    pub vc_ids: Vec<String>,
+/// VP 出示确认响应。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VpResponse {
+    /// 用户是否同意。
+    pub approved: bool,
+    /// 拒绝原因。
+    pub reason: Option<String>,
 }
 
-/// 签发授权签名前的确认上下文。
-#[derive(Debug, Clone)]
-pub struct AuthorizationRequestContext {
-    /// 主体 DID。
-    pub subject_did: String,
-    /// VC 类型。
-    pub vc_type: String,
-    /// VC hash。
-    pub vc_hash: String,
-    /// 时间戳（Unix 秒）。
-    pub timestamp: u64,
+/// 授权签名确认响应。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthorizationResponse {
+    /// 用户是否同意。
+    pub approved: bool,
+    /// 拒绝原因。
+    pub reason: Option<String>,
 }
 
-/// 用户确认回调。
+fn ensure_approved(approved: bool, reason: Option<String>) -> Result<(), DidSdkError> {
+    if approved {
+        Ok(())
+    } else {
+        let _ = reason;
+        Err(DidSdkError::UserRejected)
+    }
+}
+
+/// 用户确认回调。Server 模式无交互式用户，不实现该 trait。
 #[async_trait]
 pub trait ServerRequestHandler: Send + Sync {
-    /// 确认 DID-Signature 请求。
-    async fn on_challenge(&self, ctx: &ChallengeContext) -> Result<(), DidSdkError>;
+    /// 确认挑战签名。
+    async fn on_challenge(
+        &self,
+        challenge: &str,
+        requestor: &str,
+    ) -> Result<SignatureResponse, DidSdkError>;
 
-    /// 确认 VP 出示请求。
-    async fn on_vp_request(&self, ctx: &VpRequestContext) -> Result<(), DidSdkError>;
+    /// 确认 VP 出示。
+    async fn on_vp_request(
+        &self,
+        credential_types: &[String],
+        challenge: &str,
+    ) -> Result<VpResponse, DidSdkError>;
 
-    /// 确认签发授权请求。
+    /// 确认授权签名。
     async fn on_authorization_request(
         &self,
-        ctx: &AuthorizationRequestContext,
-    ) -> Result<(), DidSdkError>;
+        fields: &[String],
+        purpose: &str,
+        requestor: &str,
+    ) -> Result<AuthorizationResponse, DidSdkError>;
 }
 
 /// POC 默认实现：总是确认。
@@ -70,18 +72,49 @@ pub struct AutoConfirmHandler;
 
 #[async_trait]
 impl ServerRequestHandler for AutoConfirmHandler {
-    async fn on_challenge(&self, _ctx: &ChallengeContext) -> Result<(), DidSdkError> {
-        Ok(())
+    async fn on_challenge(
+        &self,
+        _challenge: &str,
+        _requestor: &str,
+    ) -> Result<SignatureResponse, DidSdkError> {
+        Ok(SignatureResponse {
+            approved: true,
+            reason: None,
+        })
     }
 
-    async fn on_vp_request(&self, _ctx: &VpRequestContext) -> Result<(), DidSdkError> {
-        Ok(())
+    async fn on_vp_request(
+        &self,
+        _credential_types: &[String],
+        _challenge: &str,
+    ) -> Result<VpResponse, DidSdkError> {
+        Ok(VpResponse {
+            approved: true,
+            reason: None,
+        })
     }
 
     async fn on_authorization_request(
         &self,
-        _ctx: &AuthorizationRequestContext,
-    ) -> Result<(), DidSdkError> {
-        Ok(())
+        _fields: &[String],
+        _purpose: &str,
+        _requestor: &str,
+    ) -> Result<AuthorizationResponse, DidSdkError> {
+        Ok(AuthorizationResponse {
+            approved: true,
+            reason: None,
+        })
     }
+}
+
+pub(crate) fn approve_signature(response: SignatureResponse) -> Result<(), DidSdkError> {
+    ensure_approved(response.approved, response.reason)
+}
+
+pub(crate) fn approve_vp(response: VpResponse) -> Result<(), DidSdkError> {
+    ensure_approved(response.approved, response.reason)
+}
+
+pub(crate) fn approve_authorization(response: AuthorizationResponse) -> Result<(), DidSdkError> {
+    ensure_approved(response.approved, response.reason)
 }

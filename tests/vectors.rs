@@ -97,3 +97,81 @@ fn fixed_seed_signature() {
         ));
     }
 }
+
+#[test]
+fn governance_signing_inputs() {
+    let json = vectors();
+    for case in json["participant_registration_v1"]
+        .as_array()
+        .expect("array")
+    {
+        let input = &case["input"];
+        let business_types = input["business_types"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap().to_string())
+            .collect::<Vec<_>>();
+        let authorized_domains = input["authorized_domains"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap().to_string())
+            .collect::<Vec<_>>();
+        let bytes = keyvault_core::signing_input::participant_registration_v1(
+            input["participant_id"].as_u64().unwrap() as u32,
+            input["controller_did"].as_str().unwrap(),
+            input["operator"].as_str().unwrap(),
+            input["chain_role"].as_str().unwrap(),
+            &business_types,
+            &authorized_domains,
+        );
+        assert_eq!(
+            String::from_utf8(bytes).unwrap(),
+            case["expected_bytes_utf8"].as_str().unwrap()
+        );
+    }
+    for case in json["operator_rotation_v1"].as_array().expect("array") {
+        let input = &case["input"];
+        let bytes = keyvault_core::signing_input::operator_rotation_v1(
+            input["participant_id"].as_u64().unwrap() as u32,
+            input["new_operator"].as_str().unwrap(),
+            input["timestamp"].as_u64().unwrap(),
+        );
+        assert_eq!(
+            String::from_utf8(bytes).unwrap(),
+            case["expected_bytes_utf8"].as_str().unwrap()
+        );
+    }
+    for case in json["controller_did_rotation_v1"]
+        .as_array()
+        .expect("array")
+    {
+        let input = &case["input"];
+        let bytes = keyvault_core::signing_input::controller_did_rotation_v1(
+            input["participant_id"].as_u64().unwrap() as u32,
+            input["new_controller_did"].as_str().unwrap(),
+            input["timestamp"].as_u64().unwrap(),
+        );
+        assert_eq!(
+            String::from_utf8(bytes).unwrap(),
+            case["expected_bytes_utf8"].as_str().unwrap()
+        );
+    }
+    for case in json["delegation_authorization_v1"]
+        .as_array()
+        .expect("array")
+    {
+        let input = &case["input"];
+        let bytes = keyvault_core::signing_input::delegation_authorization_v1(
+            input["vc_hash"].as_str().unwrap(),
+            input["delegate_did"].as_str().unwrap(),
+            input["delegate_operator"].as_str().unwrap(),
+            input["timestamp"].as_u64().unwrap(),
+        );
+        assert_eq!(
+            String::from_utf8(bytes).unwrap(),
+            case["expected_bytes_utf8"].as_str().unwrap()
+        );
+    }
+}

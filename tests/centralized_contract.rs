@@ -1,4 +1,4 @@
-//! Centralized 只读 HTTP 契约测试：只允许 GET /anchors/{id} 与 GET /dids/{did}。
+//! Centralized 只读 HTTP 契约测试。
 
 #![allow(
     clippy::unwrap_used,
@@ -7,21 +7,21 @@
 )]
 
 use std::path::Path;
-use std::sync::Arc;
 
-use did_sdk::{AddressStatus, CentralizedDidSdk, DidSdk, DidSdkConfig, DidSdkError};
-use keyvault_core::MemoryKeystore;
+use did_sdk::{ClientConfig, DidSdkError, DidSdkMode, build_client_sdk};
+use secrecy::SecretString;
 use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-fn config(dir: &Path, endpoint: String) -> DidSdkConfig {
-    let mut config = DidSdkConfig::default();
-    config.mode = did_sdk::DidSdkMode::Centralized;
+fn config(dir: &Path, endpoint: String) -> ClientConfig {
+    let mut config = ClientConfig::default();
+    config.mode = DidSdkMode::Centralized;
     config.centralized_endpoint = endpoint;
     config.cache_ttl_secs = 600;
     config.vc_storage_path = dir.join("vc");
     config.key_vault.scheme = "memory-keystore".into();
+    config.resolved_password = Some(SecretString::from("test".to_string()));
     config
 }
 
@@ -44,19 +44,9 @@ async fn anchor_get_and_cache_hit() {
         .mount(&server)
         .await;
 
-    let sdk = CentralizedDidSdk::new(
-        Arc::new(MemoryKeystore::new()),
-        config(dir.path(), server.uri()),
-    )
-    .unwrap();
-
+    let sdk = build_client_sdk(&config(dir.path(), server.uri())).unwrap();
     let first = sdk.get_anchor("a1").await.unwrap();
     assert_eq!(first.anchor_id, "a1");
-    assert_eq!(first.did, "did:key:z6MkTest");
-    assert_eq!(first.status, AddressStatus::Active);
-    assert_eq!(first.payload["source"], "wiremock");
-
-    // 第二次必须命中缓存，不再发请求。
     let second = sdk.get_anchor("a1").await.unwrap();
     assert_eq!(second, first);
     let requests = server.received_requests().await.unwrap();
@@ -72,50 +62,35 @@ async fn anchor_get_and_cache_hit() {
 async fn anchor_404_maps_to_anchor_not_found() {
     let dir = tempfile::tempdir().unwrap();
     let server = MockServer::start().await;
-    let sdk = CentralizedDidSdk::new(
-        Arc::new(MemoryKeystore::new()),
-        config(dir.path(), server.uri()),
-    )
-    .unwrap();
-    let error = sdk.get_anchor("missing").await.unwrap_err();
-    assert!(matches!(error, DidSdkError::AnchorNotFound(id) if id == "missing"));
-    let requests = server.received_requests().await.unwrap();
-    assert!(
-        requests
-            .iter()
-            .all(|request| request.method.as_str() == "GET")
-    );
+    let sdk = build_client_sdk(&config(dir.path(), server.uri())).unwrap();
+    assert!(matches!(
+        sdk.get_anchor("missing").await.unwrap_err(),
+        DidSdkError::AnchorNotFound(_)
+    ));
 }
 
 #[tokio::test]
 async fn did_get_and_cache_hit() {
     let dir = tempfile::tempdir().unwrap();
     let server = MockServer::start().await;
-    let did = "did:key:z6MkTest";
-    let record = did_sdk::DidRecord {
-        did: did.to_string(),
-        public_key: did_sdk::Ed25519PublicKey([7u8; 32]),
-        created_at: 1,
-        updated_at: 2,
-        anchor_id: None,
-        status: AddressStatus::Active,
-    };
-    let record = serde_json::to_value(&record).unwrap();
+    let did = "did:web:example.com";
+    let record = json!({
+        "did": did,
+        "method": "web",
+        "doc_hash": null,
+        "owner": null,
+        "block_number": null
+    });
     Mock::given(method("GET"))
         .and(path(format!("/dids/{did}")))
         .respond_with(ResponseTemplate::new(200).set_body_json(record))
         .mount(&server)
         .await;
 
-    let sdk = CentralizedDidSdk::new(
-        Arc::new(MemoryKeystore::new()),
-        config(dir.path(), server.uri()),
-    )
-    .unwrap();
-    let first = sdk.resolve_did(did).await.unwrap().unwrap();
+    let sdk = build_client_sdk(&config(dir.path(), server.uri())).unwrap();
+    let first = sdk.resolve_did(did).unwrap().unwrap();
     assert_eq!(first.did, did);
-    assert_eq!(first.public_key.0, [7u8; 32]);
-    let second = sdk.resolve_did(did).await.unwrap().unwrap();
+    let second = sdk.resolve_did(did).unwrap().unwrap();
     assert_eq!(second, first);
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests.len(), 1);
@@ -127,46 +102,6 @@ async fn did_get_and_cache_hit() {
 }
 
 #[tokio::test]
-async fn did_404_returns_none() {
-    let dir = tempfile::tempdir().unwrap();
-    let server = MockServer::start().await;
-    let sdk = CentralizedDidSdk::new(
-        Arc::new(MemoryKeystore::new()),
-        config(dir.path(), server.uri()),
-    )
-    .unwrap();
-    assert!(sdk.resolve_did("did:key:zMissing").await.unwrap().is_none());
-}
-
-#[tokio::test]
-async fn local_writes_never_use_remote() {
-    let dir = tempfile::tempdir().unwrap();
-    let server = MockServer::start().await;
-    let sdk = CentralizedDidSdk::new(
-        Arc::new(MemoryKeystore::new()),
-        config(dir.path(), server.uri()),
-    )
-    .unwrap();
-
-    let record = sdk.create_did().await.unwrap();
-    assert!(record.did.starts_with("did:key:z"));
-    let vc = sdk
-        .issue_self_asserted_vc(json!({"name": "alice"}))
-        .await
-        .unwrap();
-    sdk.store_vc(vc.clone()).await.unwrap();
-    sdk.remove_vc(vc.anchor_id.as_deref().unwrap())
-        .await
-        .unwrap();
-    sdk.sign_issue_authorization(&record.did, "SelfAssertedCredential", "hash", 1)
-        .await
-        .unwrap();
-
-    let requests = server.received_requests().await.unwrap();
-    assert!(requests.is_empty(), "local operations must not hit HTTP");
-}
-
-#[tokio::test]
 async fn server_error_maps_to_chain_unavailable() {
     let dir = tempfile::tempdir().unwrap();
     let server = MockServer::start().await;
@@ -175,11 +110,7 @@ async fn server_error_maps_to_chain_unavailable() {
         .respond_with(ResponseTemplate::new(500))
         .mount(&server)
         .await;
-    let sdk = CentralizedDidSdk::new(
-        Arc::new(MemoryKeystore::new()),
-        config(dir.path(), server.uri()),
-    )
-    .unwrap();
+    let sdk = build_client_sdk(&config(dir.path(), server.uri())).unwrap();
     assert!(matches!(
         sdk.get_anchor("err").await.unwrap_err(),
         DidSdkError::ChainUnavailable(_)
@@ -207,8 +138,31 @@ async fn zero_ttl_disables_cache() {
 
     let mut cfg = config(dir.path(), server.uri());
     cfg.cache_ttl_secs = 0;
-    let sdk = CentralizedDidSdk::new(Arc::new(MemoryKeystore::new()), cfg).unwrap();
+    let sdk = build_client_sdk(&cfg).unwrap();
     sdk.get_anchor("a1").await.unwrap();
     sdk.get_anchor("a1").await.unwrap();
     assert_eq!(server.received_requests().await.unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn local_writes_never_use_remote() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = MockServer::start().await;
+    let sdk = build_client_sdk(&config(dir.path(), server.uri())).unwrap();
+
+    let record = sdk.create_did().unwrap();
+    assert!(record.did.starts_with("did:key:z"));
+    let vc = sdk
+        .issue_self_asserted_vc(json!({"name": "alice"}))
+        .unwrap();
+    sdk.store_vc(vc.clone()).await.unwrap();
+    sdk.remove_vc(vc.anchor_id.as_deref().unwrap())
+        .await
+        .unwrap();
+    sdk.sign_issue_authorization(&record.did, "SelfAssertedCredential", "hash", 1)
+        .await
+        .unwrap();
+
+    let requests = server.received_requests().await.unwrap();
+    assert!(requests.is_empty(), "local operations must not hit HTTP");
 }

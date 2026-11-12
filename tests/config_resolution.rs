@@ -3,7 +3,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use did_sdk::{ConfigOverrides, DidSdkConfig, DidSdkError, DidSdkMode, resolve_config};
 use secrecy::ExposeSecret;
@@ -356,6 +356,48 @@ fn empty_env_password_falls_back_to_file() {
                 config.resolved_password.as_ref().unwrap().expose_secret(),
                 "file-pass"
             );
+        },
+    );
+}
+
+#[test]
+#[serial]
+fn nested_did_sdk_toml_is_supported() {
+    let dir = tempfile::tempdir().unwrap();
+    let config_path = dir.path().join("nested.toml");
+    std::fs::write(
+        &config_path,
+        r#"
+[did_sdk]
+mode = "centralized"
+subject_kind = "client"
+vc_storage_path = "./nested-vc"
+cache_ttl_secs = 12
+
+[did_sdk.key_vault]
+scheme = "memory-keystore"
+
+[did_sdk.centralized]
+endpoint = "http://nested.test"
+
+[did_sdk.chain]
+endpoint = "ws://nested.test:9944"
+"#,
+    )
+    .unwrap();
+    temp_env::with_vars(
+        env(
+            dir.path(),
+            &[("DID_SDK_CONFIG_FILE", Some(config_path.to_str().unwrap()))],
+        ),
+        || {
+            let config = resolve_config(ConfigOverrides::default()).unwrap();
+            assert_eq!(config.mode, DidSdkMode::Centralized);
+            assert_eq!(config.centralized_endpoint, "http://nested.test");
+            assert_eq!(config.chain_endpoint, "ws://nested.test:9944");
+            assert_eq!(config.cache_ttl_secs, 12);
+            assert_eq!(config.key_vault.scheme, "memory-keystore");
+            assert_eq!(config.vc_storage_path, PathBuf::from("./nested-vc"));
         },
     );
 }

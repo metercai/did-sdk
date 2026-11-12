@@ -1,4 +1,4 @@
-//! did-sdk Node 绑定（napi-rs）。
+//! did-sdk Node 绑定（Client 模式）。
 
 #![allow(missing_docs)]
 
@@ -9,11 +9,12 @@ use napi_derive::napi;
 
 use did_sdk::config::{ConfigOverrides, resolve_config};
 use did_sdk::{
-    DidSdk as DidSdkTrait, DidSdkConfig, DidSdkError as CoreError, SigningContext,
-    VerifiableCredential, build_did_sdk,
+    ClientConfig, DidSdkError as CoreError, PeerNumalgo, VerifiableCredential, build_client_sdk,
 };
 
-/// JS 侧构造参数（camelCase 由 napi 自动映射）。
+type Sdk = did_sdk::DidSdk<did_sdk::Client>;
+
+/// JS 构造参数。
 #[napi(object)]
 pub struct JsConfigOverrides {
     pub mode: Option<String>,
@@ -27,7 +28,7 @@ pub struct JsConfigOverrides {
     pub cache_ttl_secs: Option<u32>,
 }
 
-/// JS 侧签名上下文。
+/// JS 签名上下文。
 #[napi(object)]
 pub struct JsSigningContext {
     pub purpose: String,
@@ -56,7 +57,9 @@ fn to_napi_err(error: CoreError) -> napi::Error {
     let code = match &error {
         CoreError::UserRejected => "UserRejected",
         CoreError::VcNotFound(_) | CoreError::AnchorNotFound(_) => "NotFound",
-        CoreError::InvalidArgument(_) => "InvalidArgument",
+        CoreError::InvalidArgument(_)
+        | CoreError::UnsupportedDidMethod(_)
+        | CoreError::DidResolutionFailed(_) => "InvalidArgument",
         _ => "DidSdkError",
     };
     napi::Error::new(napi::Status::GenericFailure, format!("{code}: {error}"))
@@ -67,11 +70,22 @@ fn to_json<T: serde::Serialize>(value: &T) -> napi::Result<serde_json::Value> {
         .map_err(|error| napi::Error::from_reason(format!("SerializeError: {error}")))
 }
 
-/// did-sdk 的统一 Node 客户端。
+fn parse_numalgo(value: &str) -> napi::Result<PeerNumalgo> {
+    match value.to_ascii_lowercase().as_str() {
+        "0" | "zero" => Ok(PeerNumalgo::Zero),
+        "1" | "one" => Ok(PeerNumalgo::One),
+        "2" | "two" => Ok(PeerNumalgo::Two),
+        other => Err(napi::Error::from_reason(format!(
+            "InvalidArgument: invalid PeerNumalgo {other}"
+        ))),
+    }
+}
+
+/// did-sdk Client Node 客户端。
 #[napi]
 pub struct DidSdk {
-    inner: Arc<dyn DidSdkTrait>,
-    config: DidSdkConfig,
+    inner: Arc<Sdk>,
+    config: ClientConfig,
 }
 
 #[napi]
@@ -79,13 +93,19 @@ impl DidSdk {
     #[napi(constructor)]
     pub fn new(overrides: Option<JsConfigOverrides>) -> napi::Result<Self> {
         let config = resolve_config(to_overrides(overrides)).map_err(to_napi_err)?;
-        let sdk = build_did_sdk(&config).map_err(to_napi_err)?;
+        let sdk = build_client_sdk(&config).map_err(to_napi_err)?;
         Ok(Self { inner: sdk, config })
     }
 
     #[napi]
     pub async fn generate_did_key(&self) -> napi::Result<String> {
-        self.inner.generate_did_key().await.map_err(to_napi_err)
+        self.inner.generate_did_key().map_err(to_napi_err)
+    }
+
+    #[napi]
+    pub async fn generate_did_peer(&self, numalgo: String) -> napi::Result<String> {
+        let numalgo = parse_numalgo(&numalgo)?;
+        self.inner.generate_did_peer(numalgo).map_err(to_napi_err)
     }
 
     #[napi]
@@ -94,7 +114,7 @@ impl DidSdk {
         message: Buffer,
         context: Option<JsSigningContext>,
     ) -> napi::Result<Buffer> {
-        let context = context.map(|context| SigningContext {
+        let context = context.map(|context| did_sdk::SigningContext {
             purpose: context.purpose,
             payload_summary: context.payload_summary.unwrap_or_default(),
             requestor: context.requestor,
@@ -103,7 +123,7 @@ impl DidSdk {
             .inner
             .sign_with_did_key(
                 message.as_ref(),
-                context.unwrap_or_else(|| SigningContext {
+                context.unwrap_or_else(|| did_sdk::SigningContext {
                     purpose: "sign".into(),
                     payload_summary: String::new(),
                     requestor: None,
@@ -121,14 +141,20 @@ impl DidSdk {
     }
 
     #[napi]
+    pub fn resolve_did_peer(&self, did: String) -> napi::Result<serde_json::Value> {
+        let document = self.inner.resolve_did_peer(&did).map_err(to_napi_err)?;
+        to_json(&document)
+    }
+
+    #[napi]
     pub async fn create_did(&self) -> napi::Result<serde_json::Value> {
-        let record = self.inner.create_did().await.map_err(to_napi_err)?;
+        let record = self.inner.create_did().map_err(to_napi_err)?;
         to_json(&record)
     }
 
     #[napi]
-    pub async fn resolve_did(&self, did: String) -> napi::Result<Option<serde_json::Value>> {
-        let record = self.inner.resolve_did(&did).await.map_err(to_napi_err)?;
+    pub fn resolve_did(&self, did: String) -> napi::Result<Option<serde_json::Value>> {
+        let record = self.inner.resolve_did(&did).map_err(to_napi_err)?;
         record.map(|record| to_json(&record)).transpose()
     }
 
@@ -140,7 +166,6 @@ impl DidSdk {
         let vc = self
             .inner
             .issue_self_asserted_vc(claims)
-            .await
             .map_err(to_napi_err)?;
         to_json(&vc)
     }
@@ -227,13 +252,13 @@ impl DidSdk {
         vc_type: String,
         vc_hash: String,
         timestamp: u32,
-    ) -> napi::Result<serde_json::Value> {
+    ) -> napi::Result<Buffer> {
         let signature = self
             .inner
             .sign_issue_authorization(&subject_did, &vc_type, &vc_hash, u64::from(timestamp))
             .await
             .map_err(to_napi_err)?;
-        to_json(&signature)
+        Ok(Buffer::from(signature.0))
     }
 
     #[napi]
@@ -294,6 +319,66 @@ impl DidSdk {
     ) -> Buffer {
         Buffer::from(keyvault_core::signing_input::vp_v1(
             &holder, &challenge, &domain, &vc_hashes,
+        ))
+    }
+
+    #[napi(js_name = "participantRegistrationV1Bytes")]
+    pub fn participant_registration_v1_bytes(
+        participant_id: u32,
+        controller_did: String,
+        operator: String,
+        chain_role: String,
+        business_types: Vec<String>,
+        authorized_domains: Vec<String>,
+    ) -> Buffer {
+        Buffer::from(keyvault_core::signing_input::participant_registration_v1(
+            participant_id,
+            &controller_did,
+            &operator,
+            &chain_role,
+            &business_types,
+            &authorized_domains,
+        ))
+    }
+
+    #[napi(js_name = "operatorRotationV1Bytes")]
+    pub fn operator_rotation_v1_bytes(
+        participant_id: u32,
+        new_operator: String,
+        timestamp: u32,
+    ) -> Buffer {
+        Buffer::from(keyvault_core::signing_input::operator_rotation_v1(
+            participant_id,
+            &new_operator,
+            u64::from(timestamp),
+        ))
+    }
+
+    #[napi(js_name = "controllerDidRotationV1Bytes")]
+    pub fn controller_did_rotation_v1_bytes(
+        participant_id: u32,
+        new_controller_did: String,
+        timestamp: u32,
+    ) -> Buffer {
+        Buffer::from(keyvault_core::signing_input::controller_did_rotation_v1(
+            participant_id,
+            &new_controller_did,
+            u64::from(timestamp),
+        ))
+    }
+
+    #[napi(js_name = "delegationAuthorizationV1Bytes")]
+    pub fn delegation_authorization_v1_bytes(
+        vc_hash: String,
+        delegate_did: String,
+        delegate_operator: String,
+        timestamp: u32,
+    ) -> Buffer {
+        Buffer::from(keyvault_core::signing_input::delegation_authorization_v1(
+            &vc_hash,
+            &delegate_did,
+            &delegate_operator,
+            u64::from(timestamp),
         ))
     }
 

@@ -1,12 +1,6 @@
 //! `did-sdk` 统一错误类型。
 
 /// SDK 对外错误。
-///
-/// 绑定层按变体映射：
-/// - `UserRejected` → Python `UserRejectedError` / Node `err.code === "UserRejected"`；
-/// - `VcNotFound` / `AnchorNotFound` → `NotFoundError` / `err.code === "NotFound"`；
-/// - `InvalidArgument` → Python `ValueError` / Node `err.code === "InvalidArgument"`；
-/// - 其他 → `DidSdkError` / `err.code === "DidSdkError"`。
 #[derive(Debug, thiserror::Error)]
 pub enum DidSdkError {
     /// key 生成失败。
@@ -16,12 +10,6 @@ pub enum DidSdkError {
     #[error("Signing failed: {0}")]
     SigningFailed(String),
     /// 用户拒绝签名。
-    ///
-    /// 来源有三：
-    /// 1. `ServerRequestHandler::on_challenge` / `on_vp_request` /
-    ///    `on_authorization_request` 返回拒绝；
-    /// 2. `MockDidSdk` 的自动拒绝策略；
-    /// 3. `keyvault_core::KeyVaultError::UserRejected`（未来设备安全区）。
     #[error("User rejected signing")]
     UserRejected,
     /// 用户确认超时。
@@ -42,6 +30,15 @@ pub enum DidSdkError {
     /// Anchor 已过期。
     #[error("Anchor expired: {0}")]
     AnchorExpired(String),
+    /// 当前运行模式不支持该 DID 方法。
+    #[error("DID method not supported in this mode: {0}")]
+    UnsupportedDidMethod(String),
+    /// DID 解析失败。
+    #[error("DID resolution failed: {0}")]
+    DidResolutionFailed(String),
+    /// VC 验证失败。
+    #[error("VC verification failed: {0}")]
+    VcVerificationFailed(String),
     /// 链/中心化服务不可用。
     #[error("Chain unavailable: {0}")]
     ChainUnavailable(String),

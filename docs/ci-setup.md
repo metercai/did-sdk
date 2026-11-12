@@ -1,7 +1,7 @@
 # GitHub Actions 接入说明
 
 > **状态：已接入（2026-11-12）。** 最新一次代码提交（`64945e3`）的 5 个 workflow 全绿；
-> 运行记录见 [`docs/acceptance-checklist.md`](acceptance-checklist.md) §6。
+> 运行记录见 [`docs/acceptance-checklist.md`](acceptance-checklist.md) 与 GitHub Actions。
 
 本文档说明如何把本地 `did-sdk` 仓库接入 `metercai/did-sdk`，以及如何验证
 S1（Linux musl 静态）与 S3（四平台构建）。

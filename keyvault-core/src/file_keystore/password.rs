@@ -18,6 +18,8 @@ pub enum PasswordSource {
     File(PathBuf),
     /// 调用方直接提供。
     Direct(SecretString),
+    /// 从标准输入交互读取（POC；终端可能回显，生产应使用无回显实现）。
+    Prompt,
     /// 环境变量缺失且文件不存在时，生成随机密码并写入 0600 文件（POC 免配置）。
     AutoGenerate {
         /// 目标密码文件路径。
@@ -36,10 +38,7 @@ pub fn resolve_password(source: &PasswordSource) -> Result<SecretString, KeyVaul
     match source {
         PasswordSource::Env(name) => {
             let value = std::env::var(name).map_err(|_| {
-                KeyVaultError::IoError(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("environment variable {name} is not set"),
-                ))
+                KeyVaultError::IoError(format!("environment variable {name} is not set"))
             })?;
             if value.is_empty() {
                 return Err(KeyVaultError::InvalidPassword);
@@ -49,13 +48,27 @@ pub fn resolve_password(source: &PasswordSource) -> Result<SecretString, KeyVaul
         PasswordSource::File(path) => {
             let value = read_trimmed(path).map_err(|e| match e.kind() {
                 std::io::ErrorKind::InvalidData => KeyVaultError::InvalidPassword,
-                _ => KeyVaultError::IoError(e),
+                _ => KeyVaultError::IoError(e.to_string()),
             })?;
             Ok(SecretString::from(value))
         }
         PasswordSource::Direct(secret) => Ok(SecretString::from(secret.expose_secret().to_owned())),
+        PasswordSource::Prompt => prompt_password(),
         PasswordSource::AutoGenerate { target_file } => auto_generate(target_file),
     }
+}
+
+fn prompt_password() -> Result<SecretString, KeyVaultError> {
+    use std::io::Write as _;
+    eprint!("KeyVault password: ");
+    std::io::stderr().flush()?;
+    let mut value = String::new();
+    std::io::stdin().read_line(&mut value)?;
+    let value = value.trim_end_matches(['\r', '\n']).to_string();
+    if value.is_empty() {
+        return Err(KeyVaultError::InvalidPassword);
+    }
+    Ok(SecretString::from(value))
 }
 
 fn auto_generate(target_file: &Path) -> Result<SecretString, KeyVaultError> {

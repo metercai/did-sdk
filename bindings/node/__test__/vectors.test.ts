@@ -65,6 +65,33 @@ describe("golden vectors", () => {
     }
   });
 
+  test("governance signing inputs", () => {
+    expect(
+      DidSdk.participantRegistrationV1Bytes(
+        7,
+        "did:web:issuer.example.com",
+        "5Operator",
+        "Issuer",
+        ["EmailGateway", "Warrant"],
+        ["example.com"]
+      ).toString("utf8")
+    ).toBe(
+      "ParticipantRegistration-v1\n7\ndid:web:issuer.example.com\n" +
+        "5Operator\nIssuer\nEmailGateway,Warrant\nexample.com"
+    );
+    expect(DidSdk.operatorRotationV1Bytes(7, "5New", 9).toString("utf8")).toBe(
+      "OperatorRotation-v1\n7\n5New\n9"
+    );
+    expect(
+      DidSdk.controllerDidRotationV1Bytes(7, "did:web:new", 9).toString("utf8")
+    ).toBe("ControllerDidRotation-v1\n7\ndid:web:new\n9");
+    expect(
+      DidSdk.delegationAuthorizationV1Bytes("h", "did:key:z", "op", 9).toString(
+        "utf8"
+      )
+    ).toBe("DelegationAuthorization-v1\nh\ndid:key:z\nop\n9");
+  });
+
   test("fixed seed signature", () => {
     for (const vector of VECTORS.fixed_seed_signature) {
       const output = DidSdk.ed25519SignWithSeed(
@@ -90,6 +117,10 @@ describe("SDK roundtrip", () => {
     expect(did.startsWith("did:key:z")).toBe(true);
     expect(sdk.resolveDidKey(did).length).toBe(32);
 
+    const peer = await sdk.generateDidPeer("0");
+    expect(peer.startsWith("did:peer:0")).toBe(true);
+    expect(sdk.resolveDidPeer(peer).id).toBe(peer);
+
     const signature = await sdk.signWithDidKey(Buffer.from("hello"), {
       purpose: "test",
     });
@@ -97,7 +128,8 @@ describe("SDK roundtrip", () => {
 
     const record = await sdk.createDid();
     expect(record.did.startsWith("did:key:z")).toBe(true);
-    expect((await sdk.resolveDid(record.did))?.did).toBe(record.did);
+    expect(record.method).toBe("key");
+    expect(sdk.resolveDid(record.did)?.did).toBe(record.did);
 
     const vc = await sdk.issueSelfAssertedVc({
       name: "Alice",
@@ -111,7 +143,7 @@ describe("SDK roundtrip", () => {
 
     const vp = await sdk.buildVp([vc], "challenge-1", "example.com");
     expect(vp.holder).toBe(record.did);
-    expect(vp.proof.proofValue).toBeTruthy();
+    expect(vp.proof.jws).toBeTruthy();
 
     const header = await sdk.buildDidSignatureHeader(
       "alice@example.com",
@@ -125,7 +157,7 @@ describe("SDK roundtrip", () => {
       "body-hash",
       "rcpt-hash"
     );
-    expect(verified.valid).toBe(true);
+    expect(verified.verified).toBe(true);
 
     const authorization = await sdk.signIssueAuthorization(
       record.did,
@@ -133,7 +165,7 @@ describe("SDK roundtrip", () => {
       "vc-hash",
       1700000000
     );
-    expect(authorization.issuer_did).toBe(record.did);
+    expect(authorization.length).toBe(64);
 
     await sdk.removeVc(vc.anchor_id);
     expect(await sdk.getVc(vc.anchor_id)).toBeNull();

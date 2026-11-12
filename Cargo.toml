@@ -73,6 +73,7 @@ napi-derive = "2"
 keyvault-core = { workspace = true }
 async-trait = { workspace = true }
 async-lock = { workspace = true }
+futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }

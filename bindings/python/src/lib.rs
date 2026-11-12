@@ -1,4 +1,4 @@
-//! did-sdk Python 绑定（PyO3 + maturin）。
+//! did-sdk Python 绑定（Client 模式）。
 
 #![allow(missing_docs)]
 
@@ -14,9 +14,10 @@ use serde::de::DeserializeOwned;
 
 use did_sdk::config::{ConfigOverrides, resolve_config};
 use did_sdk::{
-    DidSdk as DidSdkTrait, DidSdkConfig, DidSdkError as CoreError, VerifiableCredential,
-    build_did_sdk,
+    ClientConfig, DidSdkError as CoreError, PeerNumalgo, VerifiableCredential, build_client_sdk,
 };
+
+type Sdk = did_sdk::DidSdk<did_sdk::Client>;
 
 create_exception!(_did_sdk, DidSdkError, PyRuntimeError);
 create_exception!(_did_sdk, UserRejectedError, PyRuntimeError);
@@ -29,7 +30,10 @@ fn to_pyerr(error: CoreError) -> PyErr {
         CoreError::VcNotFound(message) | CoreError::AnchorNotFound(message) => {
             NotFoundError::new_err(message)
         }
-        CoreError::InvalidArgument(message) => InvalidArgumentError::new_err(message),
+        CoreError::InvalidArgument(message)
+        | CoreError::UnsupportedDidMethod(message)
+        | CoreError::DidResolutionFailed(message) => InvalidArgumentError::new_err(message),
+        CoreError::VcVerificationFailed(message) => DidSdkError::new_err(message),
         other => DidSdkError::new_err(other.to_string()),
     }
 }
@@ -84,34 +88,58 @@ fn parse_overrides(dict: Option<&Bound<'_, PyDict>>) -> PyResult<ConfigOverrides
     Ok(overrides)
 }
 
-/// did-sdk 的统一 Python 客户端。
+fn parse_numalgo(value: &str) -> PyResult<PeerNumalgo> {
+    match value.to_ascii_lowercase().as_str() {
+        "0" | "zero" => Ok(PeerNumalgo::Zero),
+        "1" | "one" => Ok(PeerNumalgo::One),
+        "2" | "two" => Ok(PeerNumalgo::Two),
+        other => Err(PyValueError::new_err(format!(
+            "invalid PeerNumalgo: {other}"
+        ))),
+    }
+}
+
+/// did-sdk Client Python 客户端。
 #[pyclass]
 pub struct DidSdk {
-    inner: Arc<dyn DidSdkTrait>,
-    config: DidSdkConfig,
+    inner: Arc<Sdk>,
+    config: ClientConfig,
 }
 
 #[pymethods]
 impl DidSdk {
-    /// 构造 SDK；所有关键字参数可省略，使用内置默认值。
+    /// 构造 SDK。
     #[new]
     #[pyo3(signature = (**overrides))]
     fn new(overrides: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let overrides = parse_overrides(overrides)?;
         let config = resolve_config(overrides).map_err(to_pyerr)?;
-        let sdk = build_did_sdk(&config).map_err(to_pyerr)?;
+        let sdk = build_client_sdk(&config).map_err(to_pyerr)?;
         Ok(Self { inner: sdk, config })
     }
 
-    /// 生成一把新的 Ed25519 key，返回 `did:key:...`。
+    /// 生成 did:key。
     fn generate_did_key<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            inner.generate_did_key().await.map_err(to_pyerr)
+            inner.generate_did_key().map_err(to_pyerr)
         })
     }
 
-    /// 用 active key 对原始消息签名，返回 bytes。
+    /// 生成 did:peer（numalgo "0" / "1" / "2"）。
+    fn generate_did_peer<'py>(
+        &self,
+        py: Python<'py>,
+        numalgo: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let numalgo = parse_numalgo(numalgo)?;
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            inner.generate_did_peer(numalgo).map_err(to_pyerr)
+        })
+    }
+
+    /// 用 active key 签名。
     #[pyo3(signature = (message, *, purpose = "", payload_summary = "", requestor = None))]
     fn sign_with_did_key<'py>(
         &self,
@@ -138,34 +166,36 @@ impl DidSdk {
         })
     }
 
-    /// 从 `did:key` 解析 Ed25519 公钥（32 字节）。
+    /// 解析 did:key。
     fn resolve_did_key(&self, py: Python<'_>, did: &str) -> PyResult<Py<PyBytes>> {
         let key = self.inner.resolve_did_key(did).map_err(to_pyerr)?;
         Ok(bytes(py, key.0.to_vec()))
     }
 
-    /// 创建 DID 记录，返回 dict。
+    /// 解析 did:peer。
+    fn resolve_did_peer(&self, py: Python<'_>, did: &str) -> PyResult<Py<PyAny>> {
+        let document = self.inner.resolve_did_peer(did).map_err(to_pyerr)?;
+        to_py_object(py, &document)
+    }
+
+    /// 创建 did:key 记录。
     fn create_did<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let record = inner.create_did().await.map_err(to_pyerr)?;
+            let record = inner.create_did().map_err(to_pyerr)?;
             Python::with_gil(|py| to_py_object(py, &record))
         })
     }
 
-    /// 解析 DID，返回 dict 或 None。
-    fn resolve_did<'py>(&self, py: Python<'py>, did: String) -> PyResult<Bound<'py, PyAny>> {
-        let inner = self.inner.clone();
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let record = inner.resolve_did(&did).await.map_err(to_pyerr)?;
-            Python::with_gil(|py| match record {
-                Some(record) => Ok(to_py_object(py, &record)?),
-                None => Ok(py.None()),
-            })
-        })
+    /// 解析 DID。
+    fn resolve_did(&self, py: Python<'_>, did: String) -> PyResult<Py<PyAny>> {
+        match self.inner.resolve_did(&did).map_err(to_pyerr)? {
+            Some(record) => to_py_object(py, &record),
+            None => Ok(py.None()),
+        }
     }
 
-    /// 签发 self-asserted VC，返回 dict。
+    /// 签发 self-asserted VC。
     fn issue_self_asserted_vc<'py>(
         &self,
         py: Python<'py>,
@@ -174,15 +204,12 @@ impl DidSdk {
         let claims: serde_json::Value = from_py_object(claims)?;
         let inner = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let vc = inner
-                .issue_self_asserted_vc(claims)
-                .await
-                .map_err(to_pyerr)?;
+            let vc = inner.issue_self_asserted_vc(claims).map_err(to_pyerr)?;
             Python::with_gil(|py| to_py_object(py, &vc))
         })
     }
 
-    /// 存储 VC（接受 dict 或 VC 对象）。
+    /// 存储 VC。
     fn store_vc<'py>(
         &self,
         py: Python<'py>,
@@ -195,7 +222,7 @@ impl DidSdk {
         })
     }
 
-    /// 按 anchor id 获取 VC，返回 dict 或 None。
+    /// 获取 VC。
     fn get_vc<'py>(&self, py: Python<'py>, anchor_id: String) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -207,7 +234,7 @@ impl DidSdk {
         })
     }
 
-    /// 列出本地 VC，返回 list[dict]。
+    /// 列出 VC。
     fn list_vcs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -224,7 +251,7 @@ impl DidSdk {
         })
     }
 
-    /// 构造并签名 VP，返回 dict。
+    /// 构造 VP。
     fn build_vp<'py>(
         &self,
         py: Python<'py>,
@@ -261,7 +288,7 @@ impl DidSdk {
         })
     }
 
-    /// 验证 DID-Signature header，返回 dict。
+    /// 验证 DID-Signature header。
     fn verify_did_signature_header(
         &self,
         py: Python<'_>,
@@ -277,7 +304,7 @@ impl DidSdk {
         to_py_object(py, &result)
     }
 
-    /// 签发 VC 授权签名，返回 dict。
+    /// 签发授权签名（返回 bytes）。
     fn sign_issue_authorization<'py>(
         &self,
         py: Python<'py>,
@@ -292,11 +319,11 @@ impl DidSdk {
                 .sign_issue_authorization(&subject_did, &vc_type, &vc_hash, timestamp)
                 .await
                 .map_err(to_pyerr)?;
-            Python::with_gil(|py| to_py_object(py, &signature))
+            Python::with_gil(|py| Ok::<_, PyErr>(bytes(py, signature.0)))
         })
     }
 
-    /// 获取 Anchor，返回 dict。
+    /// 获取 anchor。
     fn get_anchor<'py>(&self, py: Python<'py>, anchor_id: String) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -305,12 +332,11 @@ impl DidSdk {
         })
     }
 
-    /// 返回解析后的配置 dict（密码字段不包含）。
+    /// 解析后的配置。
     fn resolved_config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         to_py_object(py, &self.config)
     }
 
-    /// 纯函数：DID-Signature-v1 待签名字节。
     #[staticmethod]
     fn did_signature_v1_bytes(
         py: Python<'_>,
@@ -329,7 +355,6 @@ impl DidSdk {
         )
     }
 
-    /// 纯函数：IssuedVc-v1 待签名字节。
     #[staticmethod]
     fn issued_vc_v1_bytes(
         py: Python<'_>,
@@ -344,7 +369,6 @@ impl DidSdk {
         )
     }
 
-    /// 纯函数：VP-v1 待签名字节。
     #[staticmethod]
     fn vp_v1_bytes(
         py: Python<'_>,
@@ -359,7 +383,83 @@ impl DidSdk {
         )
     }
 
-    /// 纯函数：固定 seed 的 Ed25519 签名（golden vector / 测试用）。
+    #[staticmethod]
+    #[pyo3(signature = (participant_id, controller_did, operator, chain_role, business_types, authorized_domains))]
+    fn participant_registration_v1_bytes(
+        py: Python<'_>,
+        participant_id: u32,
+        controller_did: &str,
+        operator: &str,
+        chain_role: &str,
+        business_types: Vec<String>,
+        authorized_domains: Vec<String>,
+    ) -> Py<PyBytes> {
+        bytes(
+            py,
+            keyvault_core::signing_input::participant_registration_v1(
+                participant_id,
+                controller_did,
+                operator,
+                chain_role,
+                &business_types,
+                &authorized_domains,
+            ),
+        )
+    }
+
+    #[staticmethod]
+    fn operator_rotation_v1_bytes(
+        py: Python<'_>,
+        participant_id: u32,
+        new_operator: &str,
+        timestamp: u64,
+    ) -> Py<PyBytes> {
+        bytes(
+            py,
+            keyvault_core::signing_input::operator_rotation_v1(
+                participant_id,
+                new_operator,
+                timestamp,
+            ),
+        )
+    }
+
+    #[staticmethod]
+    fn controller_did_rotation_v1_bytes(
+        py: Python<'_>,
+        participant_id: u32,
+        new_controller_did: &str,
+        timestamp: u64,
+    ) -> Py<PyBytes> {
+        bytes(
+            py,
+            keyvault_core::signing_input::controller_did_rotation_v1(
+                participant_id,
+                new_controller_did,
+                timestamp,
+            ),
+        )
+    }
+
+    #[staticmethod]
+    fn delegation_authorization_v1_bytes(
+        py: Python<'_>,
+        vc_hash: &str,
+        delegate_did: &str,
+        delegate_operator: &str,
+        timestamp: u64,
+    ) -> Py<PyBytes> {
+        bytes(
+            py,
+            keyvault_core::signing_input::delegation_authorization_v1(
+                vc_hash,
+                delegate_did,
+                delegate_operator,
+                timestamp,
+            ),
+        )
+    }
+
     #[staticmethod]
     fn ed25519_sign_with_seed(
         py: Python<'_>,
@@ -378,7 +478,6 @@ impl DidSdk {
     }
 }
 
-/// 模块入口。
 #[pymodule]
 fn _did_sdk(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<DidSdk>()?;
