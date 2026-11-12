@@ -1,7 +1,7 @@
 # keyvault-core crate 规格书
 ## 私钥管理共享 crate：KeyVault trait + FileKeystore 实现 + 多 namespace 隔离
 
-> **同步状态（2026-11-12）**：本文档与当前代码同步。已实现三 namespace
+> **同步状态（2026-11-13）**：本文档与当前代码同步。已实现三 namespace
 > （`chain-account/`、`participant-did/`、`client-did/`）、Ed25519/Sr25519、
 > SS58、FileKeystore v2（`.enc` + index v2）、`sign_checked`、`sd` 盐化哈希工具与 9 个签名输入（含 vp_v1 / vp_sd_v1）。
 > 详见 `docs/implementation-report.md` 与 `docs/acceptance-checklist.md`。
@@ -13,18 +13,19 @@
 `keyvault-core` 是**私钥管理共享 crate**，被 `did-sdk`、`chain-sdk`、`chain-owner-sdk` 共同依赖。它提供：
 
 - **`KeyVault` trait**：统一的私钥管理抽象；
-- **`FileKeystore` 实现**：POC 阶段唯一的加密文件实现；
+- **`FileKeystore` 实现**：POC 阶段加密落盘实现；
+- **`MemoryKeystore`**：测试 / Mock / 显式内存模式，不落盘；
 - **namespace 隔离机制**：强制区分服务端两类密钥（链账户 / 参与方 did）；
 - **密码学原语**：Ed25519、sr25519、base58、multibase；
 - **签名对象构造**：`DID-Signature` 七行、`IssuedVc` 五行等协议层构造函数。
 
 ### 0.2 设计原则
 
-1. **抽象统一，实现分离**。`KeyVault` trait 统一；POC 阶段唯一实现 `FileKeystore`；未来扩展 `keyvault-device`（设备安全区）和 `keyvault-server`（KMS/HSM）作为额外 crate。
+1. **抽象统一，实现分离**。`KeyVault` trait 统一；POC 提供 `FileKeystore` 与 `MemoryKeystore`；未来扩展 `keyvault-device`（设备安全区）和 `keyvault-server`（KMS/HSM）作为额外 crate。
 2. **私钥永不离开 `KeyVault`**。`KeyVault::sign` 只返回签名结果，不返回私钥。
 3. **namespace 强制隔离**。服务端两类密钥（`chain-account/` 链账户 sr25519、`participant-did/` 参与方 did:web ed25519）物理隔离，跨 namespace 调用被拒绝。
 4. **签名对象构造与存储无关**。`signing_input` 模块的构造函数接收参数，返回待签名字节，不涉及存储。
-5. **POC 阶段只做 `FileKeystore`**。设备安全区和 KMS/HSM 的实现留待生产阶段扩展。
+5. **POC 阶段加密落盘只做 `FileKeystore`**；`MemoryKeystore` 仅用于测试/Mock。设备安全区和 KMS/HSM 的实现留待生产阶段扩展。
 
 ### 0.3 依赖关系
 
@@ -147,6 +148,14 @@ pub enum KeyVaultError {
         actual: KeyAlgorithm,
         expected: KeyAlgorithm,
     },
+    #[error("Decryption failed")]
+    DecryptionFailed,
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    #[error("Operation not supported on this platform")]
+    Unsupported,
+    #[error("User rejected signing")]
+    UserRejected,
 }
 ```
 
@@ -169,11 +178,13 @@ pub enum KeyVaultError {
 
 **这三个调用入口是三段式硬绑定在 SDK 层的落点**：服务端无法把 `participant-did/` 的密钥用于 extrinsic 签名，也无法把 `chain-account/` 的密钥用于 did 断言签名。
 
-## 2. `FileKeystore` 实现
+## 2. `FileKeystore` / `MemoryKeystore` 实现
 
 ### 2.1 存储布局
 
-`FileKeystore` 将加密的密钥对存储在指定目录下，按 namespace 分子目录，每个密钥一个文件：
+`FileKeystore` 将加密的密钥对存储在指定目录下；`MemoryKeystore` 使用进程内 `HashMap`，接口相同但不加密落盘。
+
+`FileKeystore` 按 namespace 分子目录，每个密钥一个文件：
 
 ```text
 ./keystore/
@@ -328,6 +339,14 @@ pub mod signing_input {
         challenge: &str,
     ) -> Vec<u8>;
 
+    /// VP-v1 签名对象（普通 VP，非 SD）
+    pub fn vp_v1(
+        holder: &str,
+        challenge: &str,
+        domain: &str,
+        vc_hashes: &[String],
+    ) -> Vec<u8>;
+
     /// 参与方注册绑定声明（服务端 ChainOwner 治理）
     pub fn participant_registration_v1(
         participant_id: u32,
@@ -382,7 +401,31 @@ pub mod sd {
 }
 ```
 
-**这些构造函数是纯函数**，接收参数，返回待签名字节，不涉及存储。`did-sdk`、`chain-sdk`、`chain-owner-sdk` 都调用它们。**签名对象的字段与链上 `ParticipantRecord` / `AnchorRecord` 的字段一一对应**，保证链下签名与链上校验的一致性。
+**这些构造函数是纯函数**，接收参数，返回待签名字节，不涉及存储。`did-sdk`、`chain-sdk`、`chain-owner-sdk` 都调用它们。
+
+### 4.1 SD-JWT 工具
+
+`sd` 模块与 `vp_sd_v1` 服务于选择性披露：
+
+- 每个可披露属性生成 16 字节 CSPRNG 盐；
+- `H = SHA-256(base64url(salt) || base64url(name) || base64url(value))`；
+- `base64url` 无 padding；
+- `Disclosure = [salt, name, value]`；
+- `vp_sd_v1` 文本布局：
+
+```text
+VP-SD-v1
+{holder}
+{challenge}
+{domain}
+{disclosures_hash}
+{vc_hash_1}
+...
+```
+
+`disclosures_hash` 是 Disclosures 数组 canonical JSON 的 SHA-256（hex）；
+`vc_hash` 是完整 VC JSON 的 SHA-256（hex）。链上锚定仍使用完整 VC JSON 的 SHA-256，
+由 `chain-sdk` 负责；R1 后 `did-sdk` 不提供 `AnchorRecord` / `get_anchor`。
 
 ## 5. 与三类 SDK 的配合
 
@@ -459,12 +502,12 @@ pub mod sd {
 | K5 | 私钥不出 KeyVault | 无导出接口；`sign` 只返回签名 |
 | K6 | 密码管理 | 支持环境变量、交互输入、文件读取三种方式 |
 | K7 | 密码学原语 | `decode_did_key_pubkey` / `encode_did_key` / `ss58_to_account_id` / `account_id_to_ss58` 正确 |
-| K8 | 签名对象构造 | `did_signature_v1` / `issued_vc_v1` / `gateway_access_v1` / `participant_registration_v1` / `operator_rotation_v1` / `controller_did_rotation_v1` / `delegation_authorization_v1` 输出与协议规范一致 |
+| K8 | 签名对象构造 | `did_signature_v1` / `issued_vc_v1` / `gateway_access_v1` / `vp_v1` / `vp_sd_v1` / `participant_registration_v1` / `operator_rotation_v1` / `controller_did_rotation_v1` / `delegation_authorization_v1` 输出与协议规范一致 |
 | K9 | 跨 crate 共享 | `did-sdk` / `chain-sdk` / `chain-owner-sdk` 都正确依赖并使用 |
 | K10 | namespace 强制隔离 | `generate` 拒绝非法 namespace × algorithm 组合；`sign` 拒绝文件头与索引不一致 |
 | K11 | 跨 namespace 签名拒绝 | `sign_checked` 在 namespace 不匹配时返回 `NamespaceViolation`；在 algorithm 不匹配时返回 `AlgorithmMismatch` |
 | K12 | 三类签名入口隔离 | `sign_extrinsic` 用 `chain-account/` 密钥；`sign_participant_assertion` 用 `participant-did/` 密钥；`sign_with_did_key` 用 `client-did/` 密钥；交叉调用全部拒绝 |
-| K13 | 签名对象与链上字段一致 | `participant_registration_v1` 等构造函数字段与 `ParticipantRecord` / `AnchorRecord` 字段一一对应 |
+| K13 | 签名对象与链上字段一致 | `participant_registration_v1` 等构造函数字段与协议/链上字段一致；R1 后 `did-sdk` 不持有 `AnchorRecord` |
 
 ## 8. 交付物
 
