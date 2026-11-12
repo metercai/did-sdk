@@ -9,8 +9,8 @@
 DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` 两种运行模式**
 × **Mock / Centralized 两种后端** × **did:key / did:peer / did:web 三种 DID 方法**。
 
-> **当前状态：已按更新版规格重构；首个版本 [`v0.1.0`](https://github.com/metercai/did-sdk/releases/tag/v0.1.0) 已发布。**
-> 选择性披露（SD-JWT）已在 `main` 实现，尚未包含在 `v0.1.0` 资产中。
+> **当前状态：已按更新版规格重构；当前版本 [`v0.2.0`](https://github.com/metercai/did-sdk/releases/tag/v0.2.0) 已发布。**
+> `v0.2.0` 包含选择性披露（SD-JWT）与 Client/Server 双产物。
 > - 规范：[`01-DidSdk接口契约与实现规格书.md`](docs/01-DidSdk接口契约与实现规格书.md)
 > - 规范：[`04-keyvault-core_crate规格书.md`](docs/04-keyvault-core_crate规格书.md)
 > - 规范：[`selective-disclosure-interop.md`](docs/selective-disclosure-interop.md)
@@ -37,7 +37,7 @@ DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` �
 
 **Client / Server 两套产物分别编译、分别发布。**
 
-> v0.1.0 当前通过 **GitHub Release** 分发；crates.io / PyPI / npm 公开注册表尚未配置发布凭据。
+> v0.2.0 当前通过 **GitHub Release** 分发；crates.io / PyPI / npm 公开注册表尚未配置发布凭据。
 > 下方 `pip install` / `npm install` / `cargo add` 是发布后的目标用法，当前请使用
 > [Release 资产](#从-github-release-v010-安装)。
 
@@ -68,24 +68,24 @@ cd bindings/node && npm ci && npx napi build --platform --release
 cd bindings/node-server && npm install && npx napi build --platform --release
 ```
 
-### 从 GitHub Release v0.1.0 安装
+### 从 GitHub Release v0.2.0 安装
 
 无需等待 PyPI/npm 发布，可直接使用 Release 资产：
 
 ```bash
 # Python（按平台选择 wheel）
-pip install https://github.com/metercai/did-sdk/releases/download/v0.1.0/did_sdk_client-0.1.0-cp312-cp312-macosx_11_0_arm64.whl
-pip install https://github.com/metercai/did-sdk/releases/download/v0.1.0/did_sdk_server-0.1.0-cp312-cp312-macosx_11_0_arm64.whl
+pip install https://github.com/metercai/did-sdk/releases/download/v0.2.0/did_sdk_client-0.2.0-cp312-cp312-macosx_11_0_arm64.whl
+pip install https://github.com/metercai/did-sdk/releases/download/v0.2.0/did_sdk_server-0.2.0-cp312-cp312-macosx_11_0_arm64.whl
 
 # Node（Tarball 内含 5 平台 .node）
-npm install https://github.com/metercai/did-sdk/releases/download/v0.1.0/did-sdk-client-0.1.0.tgz
-npm install https://github.com/metercai/did-sdk/releases/download/v0.1.0/did-sdk-server-0.1.0.tgz
+npm install https://github.com/metercai/did-sdk/releases/download/v0.2.0/did-sdk-client-0.2.0.tgz
+npm install https://github.com/metercai/did-sdk/releases/download/v0.2.0/did-sdk-server-0.2.0.tgz
 
 # Rust 静态 CLI
-curl -LO https://github.com/metercai/did-sdk/releases/download/v0.1.0/mini-cli-x86_64-unknown-linux-musl
+curl -LO https://github.com/metercai/did-sdk/releases/download/v0.2.0/mini-cli-x86_64-unknown-linux-musl
 ```
 
-Release：[`v0.1.0`](https://github.com/metercai/did-sdk/releases/tag/v0.1.0)（含 10 个 wheel、2 个 npm tarball、4 个 Rust CLI、`SHA256SUMS`）。
+Release：[`v0.2.0`](https://github.com/metercai/did-sdk/releases/tag/v0.2.0)（含 10 个 wheel、2 个 npm tarball、4 个 Rust CLI、`SHA256SUMS`）。
 
 **本项目不提供浏览器 WASM 版本。**
 

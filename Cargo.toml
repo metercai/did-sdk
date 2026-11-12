@@ -1,6 +1,6 @@
 [package]
 name = "did-sdk"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 license = "Apache-2.0"
@@ -15,14 +15,14 @@ members = [".", "keyvault-core", "bindings/python", "bindings/python-server", "b
 default-members = [".", "keyvault-core"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 license = "Apache-2.0"
 repository = "https://github.com/metercai/did-sdk"
 
 [workspace.dependencies]
-keyvault-core = { path = "keyvault-core", version = "0.1.0" }
+keyvault-core = { path = "keyvault-core", version = "0.2.0" }
 
 async-trait = "0.1.91"
 async-lock = "3"

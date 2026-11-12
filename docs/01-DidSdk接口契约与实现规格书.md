@@ -713,4 +713,4 @@ VP-SD-v1
 - 代码提交 `ffd59fd`；CI：`ci` 43268561991、`rust-musl` 43268561636、
   `python` 43268561958、`node` 43268561892、`cross-lang` 43268561597。
 - 测试：keyvault-core 28、did-sdk 55、Python 13、Node 11。
-- 首个 Release `v0.1.0` 不包含 SD-JWT；SD 能力在 `main`。
+- 当前 Release `v0.2.0` 包含 SD-JWT 与 Client/Server 双产物。

@@ -1,6 +1,6 @@
 {
   "name": "@did-sdk/client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DID SDK native Node addon (Mock/Centralized modes)",
   "license": "Apache-2.0",
   "main": "wrapper.js",
