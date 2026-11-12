@@ -168,3 +168,15 @@ mod tests {
         assert!(decode(&encoded).is_err());
     }
 }
+
+#[cfg(test)]
+mod proptests {
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn decode_never_panics(bytes in prop::collection::vec(any::<u8>(), 0..2048)) {
+            let _ = super::decode(&bytes);
+        }
+    }
+}

@@ -46,3 +46,17 @@ pub fn decode_did_key_pubkey(did: &str) -> Result<[u8; 32], KeyVaultError> {
     pubkey.copy_from_slice(&data[2..]);
     Ok(pubkey)
 }
+
+#[cfg(test)]
+mod proptests {
+    #![allow(clippy::unwrap_used)]
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn did_key_roundtrip(public in any::<[u8; 32]>()) {
+            let did = super::encode_did_key(&public);
+            prop_assert_eq!(super::decode_did_key_pubkey(&did).unwrap(), public);
+        }
+    }
+}

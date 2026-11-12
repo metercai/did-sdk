@@ -23,7 +23,7 @@
 | 编号 | 验收项 | 状态 | 验证命令 | 证据摘要 |
 |---|---|---|---|---|
 | K1 | KeyVault trait 完整（含 `UserRejected`） | ✅ | `cargo check -p keyvault-core` | 通过 |
-| K2 | FileKeystore 生成 / 加密落盘 | ✅ | `cargo test -p keyvault-core` | 12 个集成测试 + 4 个单测全绿 |
+| K2 | FileKeystore 生成 / 加密落盘 | ✅ | `cargo test -p keyvault-core` | 12 个集成测试 + 6 个单测（含 proptest）全绿 |
 | K3 | 错误密码被拒绝 | ✅ | `cargo test -p keyvault-core --test keystore` | `Err(InvalidPassword)` |
 | K4 | 签名可验证（Ed25519 / Sr25519） | ✅ | 同上 | Ed25519 往返 + sr25519 verify 测试 |
 | K5 | 私钥不出 KeyVault | ✅ | 代码审查 | `Keypair` 无 `Serialize`/`Clone`/`Debug`；trait 无导出方法 |
