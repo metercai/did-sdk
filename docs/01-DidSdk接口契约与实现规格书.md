@@ -710,7 +710,8 @@ VP-SD-v1
 
 ## 14. 实现同步
 
-- 代码提交 `ffd59fd`；CI：`ci` 43268561991、`rust-musl` 43268561636、
+- SD-JWT 实现代码：`ffd59fd`；CI：`ci` 43268561991、`rust-musl` 43268561636、
   `python` 43268561958、`node` 43268561892、`cross-lang` 43268561597。
+- `v0.2.0` 发布提交：`6e1b97d`；release workflow：`43271664581`。
 - 测试：keyvault-core 28、did-sdk 55、Python 13、Node 11。
 - 当前 Release `v0.2.0` 包含 SD-JWT 与 Client/Server 双产物。
