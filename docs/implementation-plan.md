@@ -575,9 +575,9 @@ workflow 语法与脚本逻辑，不能替代 CI 实跑。
 | workflow | 平台 | 产物 | 关键断言 |
 |---|---|---|---|
 | `ci.yml` | ubuntu | — | fmt / clippy -D warnings / test |
-| `rust-musl.yml` | ubuntu ×2、macos-14、windows | `mini_cli` | musl `file` = statically linked |
-| `python.yml` | ubuntu gnu/musl ×2、macos-14、windows | `.whl` | 5 平台 wheel |
-| `node.yml` | ubuntu gnu/musl ×2、macos-14、windows | `.node` | 5 平台 addon |
+| `rust-musl.yml` | ubuntu ×2、macos-15、windows | `mini_cli` | musl `file` = statically linked（macOS 14 于 2026-10 退役） |
+| `python.yml` | ubuntu gnu/musl ×2、macos-15、windows | `.whl` | 5 平台 wheel |
+| `node.yml` | ubuntu gnu/musl ×2、macos-15、windows | `.node` | 5 平台 addon |
 | `cross-lang.yml` | ubuntu | — | 三语言读同一向量 JSON |
 
 发布（crates.io / PyPI / npm）不在本期；P6 只保证构建可重复与本地安装可验证。
