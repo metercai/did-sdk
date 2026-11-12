@@ -36,7 +36,7 @@
 |---|---|---|---|---|
 | D1 | `DidSdk` 接口契约完整 | ✅ | `cargo check -p did-sdk` | 全方法实现 |
 | D2 | 三模式配置切换（默认/环境/覆盖/TOML） | ✅ | `cargo test --test config_resolution` | 13 passed（默认/env/覆盖/部分 TOML/密码优先级/错误 TOML/空密码/禁用自动生成） |
-| D3 | 三模式语义一致 | ✅ | `cargo test --test consistency` | 4 passed + 1 ignored（Mock/Centralized/Chain 本地流程；header 篡改/删除不存在 VC 等） |
+| D3 | 三模式语义一致 | ✅ | `cargo test --test consistency` | 5 passed + 1 ignored（Mock/Centralized/Chain 本地流程；header 篡改/VC anchor 不匹配/删除不存在 VC 等） |
 | D4 | Mock 自动确认 / 自动拒绝 | ✅ | `cargo test --test user_rejected` | 6 passed（AutoReject 全签名路径、vault UserRejected、handler、delay） |
 | D5 | Mock 签名延迟 | ✅ | 同上 | `with_signing_delay(1)` 签名成功 |
 | D6 | Centralized 只读（仅 GET） | ✅ | `cargo test --test centralized_contract` | 7 passed；`received_requests` 全部 GET；缓存命中/TTL=0/500 错误 |

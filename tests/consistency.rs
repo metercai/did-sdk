@@ -99,3 +99,35 @@ async fn chain_anchor_integration() {
     let anchor = sdk.get_anchor(&anchor_id).await.expect("anchor");
     assert_eq!(anchor.anchor_id, anchor_id);
 }
+
+#[tokio::test]
+async fn vc_anchor_mismatch_is_rejected() {
+    use did_sdk::DidSdkError;
+    use keyvault_core::crypto::blake2::blake2b256;
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = config(dir.path(), DidSdkMode::Mock, "http://127.0.0.1:9");
+    let vc_dir = config.vc_storage_path.clone();
+    std::fs::create_dir_all(&vc_dir).unwrap();
+    let anchor_id = "a1";
+    let file = vc_dir.join(format!(
+        "{}.json",
+        hex::encode(blake2b256(anchor_id.as_bytes()))
+    ));
+    let vc = serde_json::json!({
+        "id": "urn:test",
+        "issuer": "did:key:z6MkTest",
+        "anchor_id": "other",
+        "context": [],
+        "type": ["VerifiableCredential"],
+        "issuanceDate": "1970-01-01T00:00:00Z",
+        "credentialSubject": {}
+    });
+    std::fs::write(&file, serde_json::to_vec(&vc).unwrap()).unwrap();
+
+    let sdk = MockDidSdk::new(Arc::new(MemoryKeystore::new()), config).unwrap();
+    assert!(matches!(
+        sdk.get_vc(anchor_id).await.unwrap_err(),
+        DidSdkError::InvalidArgument(_)
+    ));
+}

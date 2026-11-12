@@ -47,7 +47,13 @@ impl VcStore {
         if !path.exists() {
             return Ok(None);
         }
-        read_vc(&path).map(Some)
+        let vc = read_vc(&path)?;
+        if vc.anchor_id.as_deref() != Some(anchor_id) {
+            return Err(DidSdkError::InvalidArgument(format!(
+                "VC anchor_id mismatch for {anchor_id}"
+            )));
+        }
+        Ok(Some(vc))
     }
 
     pub(crate) fn list(&self) -> Result<Vec<VerifiableCredential>, DidSdkError> {
