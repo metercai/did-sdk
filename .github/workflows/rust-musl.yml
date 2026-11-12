@@ -26,6 +26,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
+      - name: Install zig
+        if: contains(matrix.target, 'musl')
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
       - name: Install zigbuild
         if: contains(matrix.target, 'musl')
         run: cargo install cargo-zigbuild --locked
@@ -45,7 +50,7 @@ jobs:
         run: |
           BIN="target/${{ matrix.target }}/release/examples/mini_cli"
           file "$BIN"
-          if file "$BIN" | grep -q 'statically linked'; then
+          if file "$BIN" | grep -qE 'statically linked|static-pie linked'; then
             echo "OK: static"
           else
             echo "FAIL: not static"

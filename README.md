@@ -3,10 +3,12 @@
 DID SDK：一个 Rust 核心（Linux musl 完全静态）+ Python wheel + Node 原生模块，
 提供 **Mock / Centralized / Chain** 三种运行模式，业务代码只依赖统一的 `DidSdk` 接口。
 
-> **当前状态：项目初始化完成，实施计划待评审。**
-> 本 README 中的 API 是评审目标；评审通过后按
-> [`docs/implementation-plan.md`](docs/implementation-plan.md) 的 P0–P6 阶段落地。
-> 初始化阶段只保证 workspace 可解析、可构建，业务代码尚未实现。
+> **当前状态：Rust 核心、keyvault-core、Python/Node 绑定已实现并通过本地测试。**
+> 实施计划与评审结论见 [`docs/implementation-plan.md`](docs/implementation-plan.md)，
+> 验收证据见 [`docs/acceptance-checklist.md`](docs/acceptance-checklist.md)，
+> 阶段报告见 [`docs/implementation-report.md`](docs/implementation-report.md)。
+> 跨平台（Linux musl / Windows）构建统一由 GitHub Actions runner 完成，本地只做
+> macOS arm64 验证；首次推送后以 CI 结果为准。
 
 ---
 
@@ -43,6 +45,8 @@ did-sdk = { path = "path/to/did-sdk" }
 pip install did-sdk
 ```
 
+> 尚未发布到 PyPI；当前请使用本地构建。
+
 本地构建：
 
 ```bash
@@ -56,6 +60,8 @@ pip install dist/*.whl
 ```bash
 npm install @did-sdk/node
 ```
+
+> 尚未发布到 npm；当前请使用本地构建。
 
 本地构建：
 

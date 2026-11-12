@@ -1,1 +1,86 @@
-//! 三模式一致性断言（P2 阶段实现）。
+//! 三模式共享的一致性断言。
+
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(dead_code)]
+
+use did_sdk::{DidSdk, SigningContext};
+use serde_json::json;
+
+/// 对任意 `DidSdk` 实现跑同一组本地语义断言。
+pub async fn assert_roundtrip(sdk: &dyn DidSdk) {
+    let created = sdk.create_did().await.expect("create_did");
+    assert!(created.did.starts_with("did:key:z"));
+    assert_eq!(
+        sdk.resolve_did(&created.did).await.expect("resolve_did"),
+        Some(created.clone())
+    );
+
+    let public = sdk.resolve_did_key(&created.did).expect("resolve_did_key");
+    assert_eq!(public.0, created.public_key.0);
+
+    let message = b"consistency payload";
+    let signature = sdk
+        .sign_with_did_key(
+            message,
+            SigningContext {
+                purpose: "consistency".into(),
+                payload_summary: "roundtrip".into(),
+                requestor: Some("test".into()),
+            },
+        )
+        .await
+        .expect("sign");
+    assert!(keyvault_core::crypto::ed25519::verify(
+        &public.0,
+        message,
+        &signature.0
+    ));
+
+    let header = sdk
+        .build_did_signature_header(
+            "alice@example.com",
+            "anchor:abc",
+            "blake2b:1111",
+            "blake2b:2222",
+        )
+        .await
+        .expect("header");
+    let verified = sdk
+        .verify_did_signature_header(&header, "alice@example.com", "blake2b:1111", "blake2b:2222")
+        .expect("verify header");
+    assert!(verified.valid, "reason: {:?}", verified.reason);
+    assert_eq!(verified.did.as_deref(), Some(created.did.as_str()));
+
+    let vc = sdk
+        .issue_self_asserted_vc(json!({"name": "Alice", "type": "TestCredential"}))
+        .await
+        .expect("issue vc");
+    assert_eq!(vc.issuer, created.did);
+    assert!(vc.proof.is_some());
+    let anchor_id = vc.anchor_id.clone().expect("anchor id");
+    sdk.store_vc(vc.clone()).await.expect("store vc");
+    let loaded = sdk.get_vc(&anchor_id).await.expect("get vc").expect("vc");
+    assert_eq!(loaded.id, vc.id);
+    assert_eq!(loaded.proof, vc.proof);
+    assert_eq!(sdk.list_vcs().await.expect("list vcs").len(), 1);
+
+    let presentation = sdk
+        .build_vp(vec![vc.clone()], "challenge-1", "example.com")
+        .await
+        .expect("build vp");
+    assert_eq!(presentation.holder, created.did);
+    assert_eq!(presentation.challenge, "challenge-1");
+    assert!(presentation.proof.is_some());
+
+    let authorization = sdk
+        .sign_issue_authorization(&created.did, "TestCredential", "vc-hash", 1_700_000_000)
+        .await
+        .expect("authorization");
+    assert_eq!(authorization.issuer_did, created.did);
+    assert_eq!(authorization.subject_did, created.did);
+    assert_eq!(authorization.vc_type, "TestCredential");
+    assert!(!authorization.signature.is_empty());
+
+    sdk.remove_vc(&anchor_id).await.expect("remove vc");
+    assert!(sdk.get_vc(&anchor_id).await.expect("get removed").is_none());
+}

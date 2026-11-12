@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "description": "DID SDK native Node addon (Mock/Centralized/Chain modes)",
   "license": "Apache-2.0",
-  "main": "index.js",
+  "main": "wrapper.js",
   "types": "index.d.ts",
   "files": [
     "index.js",
     "index.d.ts",
+    "wrapper.js",
+    "wrapper.d.ts",
     "*.node"
   ],
   "napi": {

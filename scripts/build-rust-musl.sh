@@ -16,7 +16,7 @@ for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
 
   bin="target/$target/release/examples/mini_cli"
   file "$bin"
-  if file "$bin" | grep -q 'statically linked'; then
+  if file "$bin" | grep -qE 'statically linked|static-pie linked'; then
     echo "[OK] $target is static"
   else
     echo "[FAIL] $target is not static"

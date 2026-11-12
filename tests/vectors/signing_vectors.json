@@ -1,5 +1,5 @@
 {
-  "$schema_note": "签名对象构造的唯一事实源。P1 阶段由 Rust 参考实现填充 fixed_seed_signature。",
+  "$schema_note": "签名对象构造的唯一事实源；三语言测试都读取本文件。expected 值由 Rust 参考实现生成后冻结。",
   "did_signature_v1": [
     {
       "input": {
@@ -13,5 +13,34 @@
       "expected_bytes_utf8": "DID-Signature-v1\ndid:key:z6MkExample\nalice@example.com\n1700000000\nanchor:abc\nblake2b:1111\nblake2b:2222"
     }
   ],
-  "fixed_seed_signature": []
+  "issued_vc_v1": [
+    {
+      "input": {
+        "issuer_did": "did:key:z6MkIssuer",
+        "subject_did": "did:key:z6MkSubject",
+        "vc_type": "SelfAssertedCredential",
+        "vc_hash": "blake2b:abcd"
+      },
+      "expected_bytes_utf8": "IssuedVc-v1\ndid:key:z6MkIssuer\ndid:key:z6MkSubject\nSelfAssertedCredential\nblake2b:abcd"
+    }
+  ],
+  "vp_v1": [
+    {
+      "input": {
+        "holder": "did:key:z6MkHolder",
+        "challenge": "challenge-123",
+        "domain": "example.com",
+        "vc_hashes": ["hash-1", "hash-2"]
+      },
+      "expected_bytes_utf8": "VP-v1\ndid:key:z6MkHolder\nchallenge-123\nexample.com\nhash-1\nhash-2"
+    }
+  ],
+  "fixed_seed_signature": [
+    {
+      "comment": "Ed25519 确定性签名：固定 32 字节种子，payload 相同则签名逐字节相同",
+      "seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "payload_utf8": "hello did-sdk",
+      "expected_signature_hex": "6087965f286078d9c25f39a05d5fabc2492a6f0524f12efabb53e7e057c959ebe01d16d83abb2d2cb26cf540a65612986783e6449ec67280c5dd9ff6c77e1300"
+    }
+  ]
 }

@@ -5,13 +5,16 @@
 | 文档编号 | DID-SDK-PLAN-001 |
 | 版本 | v0.1 |
 | 日期 | 2026-11-12 |
-| 状态 | **待评审**（评审通过前不进入 P0 业务实现） |
+| 状态 | **已批准（2026-11-12）**：D-01～D-18 全部通过；GitHub org = `metercai`；跨平台构建只在 GitHub Actions 执行 |
 | 输入规格 | `did-sdk-bootstrap.md`（1800 行，自包含引导规格） |
 | 初始化基线 | 本仓库 `main` 分支初始提交（见 §2） |
 | 评审入口 | §4 关键决策、§11 确认清单 |
 
 > 阅读顺序建议：先看 §3（架构）与 §4（需要拍板的差异），再看 §5（分阶段步骤）
 > 和 §10（风险）。§12–§14 是可直接执行的契约附录。
+>
+> **评审结论（2026-11-12）**：批准 D-01～D-18；GitHub 仓库维护者/org 为 `metercai`；
+> 跨硬件平台编译统一使用 GitHub Actions runner，本地不做交叉编译。
 
 ---
 
@@ -130,7 +133,7 @@ did-sdk/
 | 沙箱只允许写 workspace | cargo 无法写 `~/.cargo` | 本地命令使用 `CARGO_HOME=$PWD/.cargo-home`（已 gitignore） |
 | 沙箱无法写 `~/.rustup` | 不能直接 `rustup toolchain install` | 用 `RUSTUP_HOME=$PWD/.rustup` 把 1.88.0 装进仓库本地（已 gitignore）；普通开发机直接安装即可 |
 | 无 `gh` CLI / 无 GitHub 凭据 | 无法创建或推送 GitHub 仓库 | 仅本地 git；远程仓库由用户创建（D-17） |
-| 无 zig / cargo-zigbuild | 本地无法立即交叉构建 Linux musl | P3 安装；若网络仍受限，以 CI 的四平台矩阵为权威（S1 标注“CI 验证”） |
+| 无 zig / cargo-zigbuild | 本地无法交叉构建 Linux musl / Windows | 按评审结论：**跨平台编译只在 GitHub Actions runner 执行**，本地只构建 macOS arm64；S1/S3 标注“CI 验证” |
 | cargo 全局配置使用清华 git 镜像，在当前网络 SSL 握手失败 | 依赖拉取失败 | 本地使用 **gitignored** 的 `.cargo/config.toml` 指向 tuna-sparse；或命令追加 `--config`。不写入仓库 |
 | 无真实 identity-chain 元数据 | Chain 模式无法真实验收 | 运行时动态查询 + `#[ignore]` 集成测试（D-14） |
 
@@ -414,29 +417,30 @@ cargo clippy --workspace --exclude did-sdk-python --exclude did-sdk-node --all-t
 
 ### P3 — musl 静态链接与 mini_cli
 
-**目标**：S1 通过；四平台构建矩阵可执行。
+**目标**：S1 由 CI 验证；本地只验证 macOS arm64 原生构建。
 
 **任务**
 
 1. `examples/mini_cli.rs` 接入真实 API：`resolve_config(Default)` → `build_did_sdk`
    → `generate_did_key` → `sign_with_did_key` → 打印 DID 与签名长度。
-2. 安装交叉工具链（本地）：
-   - `cargo install cargo-zigbuild --locked`（写入 `$CARGO_HOME/bin`）；
-   - 安装 zig（`brew install zig` 或官方 tarball 解压到 `.tools/zig`）。
-3. 运行 `scripts/build-rust-musl.sh`，确认 `file` 输出 `statically linked`，
-   `ldd` 输出 `not a dynamic executable`。
-4. 构建 `aarch64-apple-darwin`（本机原生）与 `x86_64-pc-windows-msvc`（CI）。
-5. 检查二进制是否意外链接 `libssl`/`libcrypto`/`libgcc_s`/`libc`。
+2. 本地：`cargo build --release --example mini_cli`（aarch64-apple-darwin），
+   运行二进制确认免配置可用。
+3. **不在本地安装 zig / cargo-zigbuild**。推送到 GitHub 后由
+   `.github/workflows/rust-musl.yml` 的四个 runner 完成：
+   - Linux musl x64/arm64：`cargo zigbuild` + `file`/`ldd` 静态断言；
+   - macOS arm64 / Windows x64：原生构建。
+4. CI 若发现静态链接失败，按 R2 处理；**不允许**用动态链接产物冒充静态通过。
 
 **验收**
 
 ```bash
-bash scripts/build-rust-musl.sh
-# 期望两行 [OK]；否则失败
-```
+# 本地
+cargo build --release --example mini_cli -p did-sdk
+./target/release/examples/mini_cli
 
-**本地降级策略**：若 zig 安装受网络限制，则记录“本地未验证”，把 S1 标为
-“CI 验证”；P6 前必须在 CI 绿一次。**不允许**用动态链接产物冒充静态通过。
+# CI
+gh run watch   # 或 GitHub Actions 页面；rust-musl.yml 四平台全绿
+```
 
 ---
 
@@ -638,24 +642,24 @@ workflow 语法与脚本逻辑，不能替代 CI 实跑。
 
 请逐项确认（回复“批准”或给出修改）：
 
-- [ ] **D-01** MSRV 1.88 + resolver 3 + lockfile（subxt 0.50 需要 1.88）
-- [ ] **D-02** `secrecy` 去掉不存在的 `zeroize` feature
-- [ ] **D-03** 用 `getrandom 0.4` 替代 `rand 0.8` + dalek `rand_core`
-- [ ] **D-04** 接受 ring 作为 reqwest/subxt 传递依赖，S1 只验证静态
-- [ ] **D-05** `create_did` / `issue_self_asserted_vc` 改为 async
-- [ ] **D-06** 新增 `vp_v1` 签名输入并纳入 golden vector
-- [ ] **D-07** DID-Signature header 线格式（multibase base64url JSON）
-- [ ] **D-08** 三模式统一文件型 `VcStore`
-- [ ] **D-09** FileKeystore index / 文件名 / Argon2 参数 / AAD
-- [ ] **D-10** active key 选择规则
-- [ ] **D-11** 配置部分合并 + 密码优先级修复
-- [ ] **D-12** Python `create_exception!` + `python-source`
-- [ ] **D-13** Node JS loader 设置 `err.code`
-- [ ] **D-14** Chain 动态元数据 + `#[ignore]`，不提交 `.scale`
-- [ ] **D-15** 附录 A 的类型字段与 RFC3339 时间
-- [ ] **D-16** `temp-env` 做环境变量测试隔离
-- [ ] **D-17** 本地 git；GitHub 远程由用户创建（org 确认：`metercai`？）
-- [ ] **D-18** 本期不 publish，只做构建/安装验证
+- [x] **D-01** MSRV 1.88 + resolver 3 + lockfile（subxt 0.50 需要 1.88）
+- [x] **D-02** `secrecy` 去掉不存在的 `zeroize` feature
+- [x] **D-03** 用 `getrandom 0.4` 替代 `rand 0.8` + dalek `rand_core`
+- [x] **D-04** 接受 ring 作为 reqwest/subxt 传递依赖，S1 只验证静态
+- [x] **D-05** `create_did` / `issue_self_asserted_vc` 改为 async
+- [x] **D-06** 新增 `vp_v1` 签名输入并纳入 golden vector
+- [x] **D-07** DID-Signature header 线格式（multibase base64url JSON）
+- [x] **D-08** 三模式统一文件型 `VcStore`
+- [x] **D-09** FileKeystore index / 文件名 / Argon2 参数 / AAD
+- [x] **D-10** active key 选择规则
+- [x] **D-11** 配置部分合并 + 密码优先级修复
+- [x] **D-12** Python `create_exception!` + `python-source`
+- [x] **D-13** Node JS loader 设置 `err.code`
+- [x] **D-14** Chain 动态元数据 + `#[ignore]`，不提交 `.scale`
+- [x] **D-15** 附录 A 的类型字段与 RFC3339 时间
+- [x] **D-16** `temp-env` 做环境变量测试隔离
+- [x] **D-17** 本地 git；GitHub 远程由用户创建（org 确认：`metercai`？）
+- [x] **D-18** 本期不 publish，只做构建/安装验证
 
 **其他需要确认的问题**
 
@@ -665,8 +669,8 @@ workflow 语法与脚本逻辑，不能替代 CI 实跑。
 4. `repository` 的 GitHub org 是否为 `metercai`？
 5. 是否需要 Apache-2.0 `LICENSE` 文件？（当前 README 引用但文件未创建）
 
-**评审通过后**：我将从 P0 开始，每完成一个阶段提交一次，并在每阶段结束汇报
-门禁命令输出与验收清单更新。
+**评审结论（2026-11-12）**：已批准。实施按 P0 → P6 推进，每阶段一个 commit，
+并汇报门禁命令输出与验收清单更新。跨平台编译由 GitHub Actions 完成。
 
 ---
 

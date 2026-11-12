@@ -35,6 +35,7 @@ argon2 = "0.5"
 blake2 = "0.10"
 multibase = "0.9"
 bs58 = "0.5"
+hex = "0.4"
 zeroize = { version = "1.8", features = ["derive"] }
 secrecy = "0.10"
 # ed25519-dalek 3.x / getrandom 0.4 是当前唯一互相兼容的熵源组合：
@@ -53,6 +54,7 @@ tokio = { version = "1.44", features = ["rt-multi-thread", "macros", "sync", "fs
 # 关键：musl 静态下必须用 rustls（纯 Rust TLS），不能拉 OpenSSL/native-tls。
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 subxt = "0.50"
+scale-value = "0.18"
 dirs = "6"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
@@ -83,12 +85,15 @@ secrecy = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 subxt = { workspace = true }
+scale-value = { workspace = true }
 dirs = { workspace = true }
+hex = { workspace = true }
 
 [dev-dependencies]
 wiremock = { workspace = true }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
+temp-env = "0.3"
 tokio = { workspace = true, features = ["full"] }
 
 [features]

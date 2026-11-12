@@ -11,7 +11,11 @@ else
 fi
 
 if [[ -n "$target" ]]; then
-  npx napi build --platform --release --target "$target"
+  if [[ "$target" == *musl* ]]; then
+    npx napi build --platform --release --target "$target" --zig
+  else
+    npx napi build --platform --release --target "$target"
+  fi
 else
   npx napi build --platform --release
 fi

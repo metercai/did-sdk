@@ -1178,14 +1178,17 @@ dependencies = [
  "bs58",
  "dirs",
  "ed25519-dalek",
+ "hex",
  "keyvault-core",
  "multibase",
  "reqwest",
+ "scale-value",
  "secrecy",
  "serde",
  "serde_json",
  "serial_test",
  "subxt",
+ "temp-env",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -1199,10 +1202,12 @@ name = "did-sdk-node"
 version = "0.1.0"
 dependencies = [
  "did-sdk",
+ "hex",
  "keyvault-core",
  "napi",
  "napi-build",
  "napi-derive",
+ "serde",
  "serde_json",
  "tokio",
 ]
@@ -1212,9 +1217,12 @@ name = "did-sdk-python"
 version = "0.1.0"
 dependencies = [
  "did-sdk",
+ "hex",
  "keyvault-core",
  "pyo3",
  "pyo3-async-runtimes",
+ "pythonize",
+ "serde",
  "serde_json",
  "tokio",
 ]
@@ -2294,12 +2302,14 @@ dependencies = [
  "dirs",
  "ed25519-dalek",
  "getrandom 0.4.3",
+ "hex",
  "multibase",
  "proptest",
  "schnorrkel",
  "secrecy",
  "serde",
  "serde_json",
+ "temp-env",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -3040,6 +3050,16 @@ dependencies = [
  "pyo3-build-config",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "pythonize"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91a6ee7a084f913f98d70cdc3ebec07e852b735ae3059a1500db2661265da9ff"
+dependencies = [
+ "pyo3",
+ "serde",
 ]
 
 [[package]]
@@ -4308,6 +4328,15 @@ name = "target-lexicon"
 version = "0.12.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
+
+[[package]]
+name = "temp-env"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96374855068f47402c3121c6eed88d29cb1de8f3ab27090e273e420bdabcf050"
+dependencies = [
+ "parking_lot",
+]
 
 [[package]]
 name = "tempfile"

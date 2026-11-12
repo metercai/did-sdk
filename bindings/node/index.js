@@ -310,6 +310,6 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { version } = nativeBinding
+const { DidSdk } = nativeBinding
 
-module.exports.version = version
+module.exports.DidSdk = DidSdk

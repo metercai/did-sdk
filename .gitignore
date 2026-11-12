@@ -4,6 +4,7 @@
 /.cargo/config.toml
 /.rustup/
 /.npm-cache/
+/.local-home/
 **/*.rs.bk
 /dist/
 /.venv-vectors/
