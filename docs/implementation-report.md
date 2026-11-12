@@ -5,7 +5,7 @@
 | 日期 | 2026-11-12 |
 | 规格 | `01-DidSdk接口契约与实现规格书1.md`、`04-keyvault-core_crate规格书1.md` |
 | 范围 | keyvault-core namespace 隔离、DidSdk<Client/Server>、三种 DID 方法、VC 钱包、绑定与测试 |
-| 结论 | v2 代码与本地测试完成；GitHub Actions 全绿（提交 `52f8555`） |
+| 结论 | v2 代码与本地测试完成；GitHub Actions 全绿（提交 `2925627`） |
 
 ---
 
@@ -76,15 +76,15 @@ DidSdk<Server> ── vault: None ───────────────�
   `key_vault: None` 或 `key_vault_scheme="none"` 关闭。
 - VC 加密默认复用 KeyVault 密码；无 KeyVault 时回退独立密码/自动 `.vc_password`。
 
-## 4. GitHub Actions（v2 提交 `52f8555`）
+## 4. GitHub Actions（v2 提交 `2925627`）
 
 | workflow | run | 结果 |
 |---|---|---|
-| `ci` | [43206452324](https://github.com/metercai/did-sdk/actions/runs/43206452324) | success |
-| `rust-musl` | [43206452484](https://github.com/metercai/did-sdk/actions/runs/43206452484) | 4/4 success |
-| `python` | [43206452418](https://github.com/metercai/did-sdk/actions/runs/43206452418) | 5/5 success |
-| `node` | [43206452331](https://github.com/metercai/did-sdk/actions/runs/43206452331) | 5/5 success |
-| `cross-lang` | [43206452358](https://github.com/metercai/did-sdk/actions/runs/43206452358) | success |
+| `ci` | [43216003187](https://github.com/metercai/did-sdk/actions/runs/43216003187) | success |
+| `rust-musl` | [43216003000](https://github.com/metercai/did-sdk/actions/runs/43216003000) | 4/4 success |
+| `python` | [43216002988](https://github.com/metercai/did-sdk/actions/runs/43216002988) | 10/10 success |
+| `node` | [43216003104](https://github.com/metercai/did-sdk/actions/runs/43216003104) | 10/10 success |
+| `cross-lang` | [43216003140](https://github.com/metercai/did-sdk/actions/runs/43216003140) | success |
 
 musl 静态日志：
 

@@ -1,6 +1,6 @@
 # GitHub Actions 接入说明
 
-> **状态：已接入（2026-11-12）。** 最新一次代码提交（`64945e3`）的 5 个 workflow 全绿；
+> **状态：已接入（2026-11-12）。** 最新一次代码提交（`2925627`）的 5 个 workflow 全绿（Python/Node 各 10 个双产物 job）；
 > 运行记录见 [`docs/acceptance-checklist.md`](acceptance-checklist.md) 与 GitHub Actions。
 
 本文档说明如何把本地 `did-sdk` 仓库接入 `metercai/did-sdk`，以及如何验证
@@ -47,8 +47,8 @@ gh repo create metercai/did-sdk --private --source=. --remote=origin --push
 |---|---|---|
 | `ci.yml` | push / PR / 手动 | fmt、clippy -D warnings、Rust 测试 |
 | `rust-musl.yml` | push / PR / 手动 | 四平台构建；Linux musl `file` 静态断言 |
-| `python.yml` | push / PR / 手动 | 5 平台 wheel |
-| `node.yml` | push / PR / 手动 | 5 平台 `.node` |
+| `python.yml` | push / PR / 手动 | Client/Server 各 5 平台 wheel（10 jobs） |
+| `node.yml` | push / PR / 手动 | Client/Server 各 5 平台 `.node`（10 jobs） |
 | `cross-lang.yml` | push / PR / 手动 | Rust/Python/Node 读取同一 golden vector |
 
 所有 workflow 都支持 `workflow_dispatch`，可在 Actions 页面手动触发。

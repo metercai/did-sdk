@@ -57,9 +57,9 @@
 
 | 编号 | 验收项 | 状态 | 证据 |
 |---|---|---|---|
-| S1 | Linux musl 完全静态 | ✅ | `rust-musl` run [43206452484](https://github.com/metercai/did-sdk/actions/runs/43206452484)；x86_64/aarch64 `statically linked` + `ldd: not a dynamic executable` |
+| S1 | Linux musl 完全静态 | ✅ | `rust-musl` run [43216003000](https://github.com/metercai/did-sdk/actions/runs/43216003000)；x86_64/aarch64 `statically linked` + `ldd: not a dynamic executable` |
 | S2 | `UserRejected` 三语言透传 | ✅ | Rust 测试 + Python/Node 映射代码 |
-| S3 | 四平台构建矩阵 | ✅ | Rust 4/4、Python 5/5、Node 5/5 全绿；CI `43206452324`、Python `43206452418`、Node `43206452331` |
+| S3 | 双产物构建矩阵 | ✅ | Rust 4/4、Python 10/10（client+server）、Node 10/10（client+server）；CI `43216003187`、Python `43216002988`、Node `43216003104` |
 
 ## 4. 绑定
 
@@ -99,21 +99,21 @@
 | Rust crate | `did-sdk-client` | `did-sdk-server` | ✅ |
 | Python wheel | `did-sdk-client` (`did_sdk`) | `did-sdk-server` (`did_sdk_server`) | ✅ 本地构建/测试 |
 | Node addon | `@did-sdk/client` | `@did-sdk/server` | ✅ 本地构建/测试 |
-| CI 矩阵 | 5 平台 | 5 平台 | ⏳ 待本轮推送后重跑 |
+| CI 矩阵 | 5 平台 | 5 平台 | ✅ 10/10 全绿 |
 
 Server 默认 `key_vault: Some(FileKeystore)`；`key_vault_scheme="none"` 可关闭本地签名器。
 VC 加密密钥默认复用 KeyVault 密码；无 KeyVault 时回退
 `DID_SDK_VC_STORAGE_PASSWORD` / 自动 `.vc_password`。
 
-## 6. GitHub Actions（v2 代码提交 `52f8555`）
+## 6. GitHub Actions（v2 代码提交 `2925627`）
 
 | workflow | run | 结果 |
 |---|---|---|
-| `ci` | [43206452324](https://github.com/metercai/did-sdk/actions/runs/43206452324) | success |
-| `rust-musl` | [43206452484](https://github.com/metercai/did-sdk/actions/runs/43206452484) | 4/4 success |
-| `python` | [43206452418](https://github.com/metercai/did-sdk/actions/runs/43206452418) | 5/5 success |
-| `node` | [43206452331](https://github.com/metercai/did-sdk/actions/runs/43206452331) | 5/5 success |
-| `cross-lang` | [43206452358](https://github.com/metercai/did-sdk/actions/runs/43206452358) | success |
+| `ci` | [43216003187](https://github.com/metercai/did-sdk/actions/runs/43216003187) | success |
+| `rust-musl` | [43216003000](https://github.com/metercai/did-sdk/actions/runs/43216003000) | 4/4 success |
+| `python` | [43216002988](https://github.com/metercai/did-sdk/actions/runs/43216002988) | 10/10 success |
+| `node` | [43216003104](https://github.com/metercai/did-sdk/actions/runs/43216003104) | 10/10 success |
+| `cross-lang` | [43216003140](https://github.com/metercai/did-sdk/actions/runs/43216003140) | success |
 
 ## 7. 待外部条件
 
