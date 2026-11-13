@@ -717,6 +717,15 @@ The chain owner recomputes `anchor_payload_hash` from the VC and compares it wit
 
 ### 10.3 Release evidence
 
+`v0.2.1` (additive delegation authorization):
+
+- Implementation commit: `8fe8ba3`; Rust tests: keyvault-core 28, did-sdk 68 (96 total).
+- Local gates: `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`,
+  `cargo test --locked --all-features`, `cargo doc --no-deps` — all green.
+- Release tag: `v0.2.1` (annotated); `.github/workflows/release.yml` runs on tag push.
+
+`v0.2.0` (selective disclosure):
+
 - Implementation commit: `ffd59fd`; tests: keyvault-core 28, did-sdk 55, Python 13, Node 11.
 - Release tag: `v0.2.0` (`6e1b97d`); release workflow: `43271664581`.
 - CI: `ci` 43268561991, `rust-musl` 43268561636, `python` 43268561958,
