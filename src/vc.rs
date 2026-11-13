@@ -431,8 +431,11 @@ pub(crate) fn assemble_vc(
     Ok(vc)
 }
 
-/// VC 去掉 proof 后的 canonical JSON hash。
-pub(crate) fn vc_hash_without_proof(vc: &VerifiableCredential) -> Result<String, DidSdkError> {
+/// VC 去掉 `proof`、保留 `anchor_id` 的 BLAKE2b-256（小写 hex，无前缀）。
+///
+/// 用途：`IssuedVc-v1` 签名输入、VC 签发哈希。与 `chain-sdk`
+/// `sd::vc_signing_input` 的哈希部分逐字节一致。
+pub fn vc_hash_without_proof(vc: &VerifiableCredential) -> Result<String, DidSdkError> {
     let mut copy = vc.clone();
     copy.proof = None;
     let bytes = serde_json::to_vec(&copy)
@@ -440,11 +443,30 @@ pub(crate) fn vc_hash_without_proof(vc: &VerifiableCredential) -> Result<String,
     Ok(hex::encode(blake2b256(&bytes)))
 }
 
-/// VC 完整 JSON hash（VP 绑定用）。
-pub(crate) fn vc_hash(vc: &VerifiableCredential) -> Result<String, DidSdkError> {
+/// 完整 VC（含 `proof` / `anchor_id`）的 BLAKE2b-256（小写 hex，无前缀）。
+///
+/// 用途：`VP-SD-v1` 的 `vc_hash`。与 `chain-sdk` `sd::vp_signing_input`
+/// 的 VC 哈希逐字节一致。
+pub fn vc_hash(vc: &VerifiableCredential) -> Result<String, DidSdkError> {
     let bytes = serde_json::to_vec(vc)
         .map_err(|error| DidSdkError::InvalidArgument(format!("serialize VC: {error}")))?;
     Ok(hex::encode(blake2b256(&bytes)))
+}
+
+/// 锚定载荷哈希：去掉 `proof` 与 `anchor_id`，紧凑 JSON，BLAKE2b-256，
+/// 返回 `"blake2b:<小写 hex>"`。
+///
+/// 这是路径三（用户 A 委托链主代提交锚定）中 `vc_hash` 的唯一推荐来源。
+/// 必须与 `chain-sdk` `sd::payload_hash` 逐字节一致：两者对同一个
+/// [`VerifiableCredential`] 的 `proof = None, anchor_id = None` 副本调用
+/// `serde_json::to_vec`，再做 BLAKE2b-256 并加 `blake2b:` 前缀。
+pub fn anchor_payload_hash(vc: &VerifiableCredential) -> Result<String, DidSdkError> {
+    let mut copy = vc.clone();
+    copy.proof = None;
+    copy.anchor_id = None;
+    let bytes = serde_json::to_vec(&copy)
+        .map_err(|error| DidSdkError::InvalidArgument(format!("serialize VC: {error}")))?;
+    Ok(format!("blake2b:{}", hex::encode(blake2b256(&bytes))))
 }
 
 /// VC 的签发待签名字节。

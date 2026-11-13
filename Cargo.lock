@@ -595,7 +595,7 @@ checksum = "092966b41edc516079bdf31ec78a2e0588d1d0c08f78b91d8307215928642b2b"
 
 [[package]]
 name = "did-sdk"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "argon2",
  "async-lock",
@@ -627,14 +627,14 @@ dependencies = [
 
 [[package]]
 name = "did-sdk-client"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "did-sdk",
 ]
 
 [[package]]
 name = "did-sdk-node"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "did-sdk",
  "hex",
@@ -650,7 +650,7 @@ dependencies = [
 
 [[package]]
 name = "did-sdk-node-server"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "did-sdk",
  "hex",
@@ -666,7 +666,7 @@ dependencies = [
 
 [[package]]
 name = "did-sdk-python"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "did-sdk",
  "hex",
@@ -682,7 +682,7 @@ dependencies = [
 
 [[package]]
 name = "did-sdk-python-server"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "did-sdk",
  "hex",
@@ -698,7 +698,7 @@ dependencies = [
 
 [[package]]
 name = "did-sdk-server"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "did-sdk",
 ]
@@ -1359,7 +1359,7 @@ dependencies = [
 
 [[package]]
 name = "keyvault-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "argon2",
  "async-lock",

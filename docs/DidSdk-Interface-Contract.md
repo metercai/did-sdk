@@ -3,8 +3,8 @@
 | Item | Value |
 |---|---|
 | Document | DidSdk interface contract and implementation specification |
-| Package | `did-sdk` / `did-sdk-client` / `did-sdk-server` v0.2.0 |
-| Status | Implemented and released; 55 Rust tests passing; CI green |
+| Package | `did-sdk` / `did-sdk-client` / `did-sdk-server` v0.2.1 |
+| Status | Implemented and released; 68 Rust tests passing; CI green |
 | Audience | Client applications, `aimail-sdk`, `chain-sdk`, `chain-owner-sdk`, binding maintainers |
 | Normative | This document is the single source of truth for the DidSdk contract. |
 
@@ -96,6 +96,8 @@ client app / aimail-sdk            chain-sdk / chain-owner-sdk
 | `resolve_did` | yes | yes |
 | `generate_did_key` / `generate_did_peer` | yes | no |
 | `sign_with_did_key` | yes | no |
+| `sign_issue_authorization` | yes | no |
+| `sign_delegation_authorization` | yes | no |
 | `resolve_did_key` / `resolve_did_peer` | yes | no |
 | `create_did` | yes | no |
 | `resolve_did_web` | no | yes |
@@ -171,6 +173,10 @@ impl DidSdk<Client> {
     pub async fn sign_issue_authorization(
         &self, subject_did: &str, vc_type: &str, vc_hash: &str, timestamp: u64,
     ) -> Result<IssueAuthorizationSignature, DidSdkError>;
+
+    pub async fn sign_delegation_authorization(
+        &self, vc_hash: &str, delegate_did: &str, delegate_operator: &str, timestamp: u64,
+    ) -> Result<DelegationAuthorization, DidSdkError>;
 }
 ```
 
@@ -222,6 +228,7 @@ impl DidSdk<Server> {
 | `Signature` | newtype over `Vec<u8>` |
 | `Ed25519PublicKey` | newtype over `[u8; 32]` |
 | `IssueAuthorizationSignature` | newtype over `Vec<u8>` |
+| `DelegationAuthorization` | `version` (fixed `1`), `vc_hash`, `delegate_did`, `delegate_operator`, `timestamp: u64`, `signer_did`, `signature: Vec<u8>` |
 | `DidRecord` | `did`, `method: DidMethod`, `doc_hash`, `owner`, `block_number` |
 | `DidMethod` | `Key`, `Peer`, `Web` |
 | `PeerNumalgo` | `Zero`, `One`, `Two` |
@@ -269,6 +276,84 @@ pub trait ServerRequestHandler: Send + Sync {
 
 Responses contain `approved: bool` and `reason: Option<String>`; rejection maps to
 `DidSdkError::UserRejected`.
+
+### 3.7 Signing objects
+
+`did-sdk` produces two different authorization declarations. They are not interchangeable.
+
+| Signing object | Produced by | Purpose |
+|---|---|---|
+| `IssuedVc-v1` → `IssueAuthorizationSignature` | issuer (`DidSdk<Client>`) | authorise issuance of a VC |
+| `DelegationAuthorization-v1` → `DelegationAuthorization` | user A / holder (`DidSdk<Client>`) | authorise a chain owner to submit an anchor on the user's behalf (path 3) |
+
+Byte layouts (UTF-8, `\n` between lines, no trailing newline, built only by
+`keyvault_core::signing_input::*`):
+
+```text
+IssuedVc-v1
+{issuer_did}
+{subject_did}
+{vc_type}
+{vc_hash}
+```
+
+```text
+DelegationAuthorization-v1
+{vc_hash}
+{delegate_did}
+{delegate_operator}
+{timestamp}
+```
+
+`sign_issue_authorization(subject_did, vc_type, vc_hash, timestamp)`:
+
+- the `timestamp` argument is **not** part of `IssuedVc-v1`; it is not a replay-protection field;
+- use `sign_delegation_authorization` when a time-bound authorization is required;
+- adding time binding to issuance requires a new `IssuedVc-v2`; `IssuedVc-v1` must not change.
+
+`sign_delegation_authorization(vc_hash, delegate_did, delegate_operator, timestamp)`:
+
+- signs `DelegationAuthorization-v1` with the active `did:key` `ClientDid`/Ed25519 key;
+- requires an active `did:key`; with `did:peer` it returns
+  `DidSdkError::Unsupported("delegation authorization requires did:key")`;
+- validates non-empty `vc_hash` / `delegate_did` / `delegate_operator`, a `did:` prefixed
+  `delegate_did`, and `timestamp > 0`; violations return `DidSdkError::InvalidArgument`;
+- goes through `ServerRequestHandler::on_authorization_request` (`fields = ["DelegationAuthorization"]`,
+  `purpose = "delegation"`, `requestor = delegate_did`); rejection returns `UserRejected`;
+- `DelegationAuthorization` is self-contained: `signer_did` is the did:key whose public key verifies
+  `signature`, so the chain owner needs no did-sdk internals.
+
+JSON envelope (`DelegationAuthorization::to_bytes`, compact `serde_json::to_vec`):
+
+```json
+{"version":1,"vc_hash":"blake2b:<hex>","delegate_did":"did:web:...","delegate_operator":"5...","timestamp":1700000000,"signer_did":"did:key:z...","signature":[0,1,...]}
+```
+
+- the signature covers only the `DelegationAuthorization-v1` bytes above, never the JSON envelope
+  (field order is therefore irrelevant to verification);
+- `signature` is a raw 64-byte Ed25519 signature, JSON-encoded as an array of byte values;
+- `from_bytes` re-validates `version == 1`, non-empty fields, `did:` `delegate_did`,
+  `did:key:` `signer_did` and `timestamp > 0`;
+- `DelegationAuthorization::verify()` re-derives the signing input and verifies it with the
+  `signer_did` key (client-side self-check and tests; the chain owner must still verify independently).
+
+### 3.8 VC hash functions
+
+The three hash functions are exported at the crate root (`did_sdk::...`).
+
+| Function | Drops `proof` | Drops `anchor_id` | Returns |
+|---|---|---|---|
+| `vc_hash_without_proof` | yes | no | lowercase hex (64 chars, no prefix) |
+| `vc_hash` | no | no | lowercase hex (64 chars, no prefix) |
+| `anchor_payload_hash` | yes | yes | `blake2b:<lowercase hex>` |
+
+- all three hash the compact `serde_json::to_vec` JSON with BLAKE2b-256; field order is fixed by the
+  `VerifiableCredential` struct (no canonical-JSON sorting);
+- `anchor_payload_hash` is byte-identical to `chain-sdk::sd::payload_hash` (v0.1.1);
+  `vc_hash_without_proof` matches the per-VC hash used by `chain-sdk::sd::vc_signing_input`, and
+  `vc_hash` matches the per-VC hash used by `chain-sdk::sd::vp_signing_input`;
+- `anchor_payload_hash` is the value user A signs in `DelegationAuthorization.vc_hash`; the chain
+  owner recomputes it from the VC when verifying (see 8.4).
 
 ---
 
@@ -537,6 +622,45 @@ of the full VC JSON. See `selective-disclosure-interop.md` for the byte-level co
   retention of disclosed data.
 - BBS+ is not included; it is a future upgrade path for unlinkability and predicates.
 
+### 8.4 Delegated anchoring (path 3)
+
+User A issues a VC with `did-sdk` and authorises a chain owner to submit the anchor on the user's
+behalf. `did-sdk` does not submit anchors or query chains; it only produces the self-contained
+authorization that the chain owner carries to `submit_delegated_anchor`.
+
+```rust
+let now = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)?
+    .as_secs(); // caller-chosen Unix seconds
+let (vc, disclosures) = sdk.issue_selective_vc(claims, &["name".into()])?;
+sdk.store_vc_with_disclosures(vc.clone(), disclosures).await?;
+
+// Anchor payload hash: VC without proof / anchor_id, "blake2b:<hex>".
+let vc_hash = did_sdk::anchor_payload_hash(&vc)?;
+
+let authorization = sdk
+    .sign_delegation_authorization(
+        &vc_hash,
+        "did:web:identity.example.com:chain-owner", // chain owner did:web
+        "5GrwvaEF5zXb26Fz9rcQpDWSZ",                // chain owner SS58
+        now,
+    )
+    .await?;
+let bytes = authorization.to_bytes()?; // passed to the chain owner as authorization_signature
+```
+
+Chain-owner verification (outside `did-sdk`):
+
+1. parse with `DelegationAuthorization::from_bytes` (or the JSON shape in 3.7);
+2. verify `signature` with the `signer_did` did:key public key (`DelegationAuthorization::verify`
+   may be used for a self-check);
+3. check `signer_did == issuer_did`, `vc_hash` matches the submitted VC, and `timestamp` freshness;
+4. check `delegate_did` / `delegate_operator` against the chain owner's own identity;
+5. submit the anchor with `payload_hash = "blake2b:" + H(IssuedVc-v1 input)`.
+
+The chain owner recomputes `anchor_payload_hash` from the VC and compares it with the signed
+`vc_hash`; it never trusts unsigned fields.
+
 ---
 
 ## 9. Security Constraints
@@ -551,6 +675,7 @@ of the full VC JSON. See `selective-disclosure-interop.md` for the byte-level co
 | Chain queries | none; no `get_anchor` / `subxt` |
 | VC encryption | `DVCS` ciphertext for VC + disclosures |
 | SD signatures | `vp_sd_v1` covers VC hashes and disclosure hash |
+| Delegation signatures | `DelegationAuthorization-v1` covers `vc_hash`, `delegate_did`, `delegate_operator`, `timestamp` |
 
 ---
 
@@ -578,6 +703,8 @@ of the full VC JSON. See `selective-disclosure-interop.md` for the byte-level co
 | D16 | `cargo tree -p did-sdk` has no `subxt` |
 | D17 | No `get_anchor` / chain-query interface |
 | D18 | Signing/verification do not read anchor state |
+| D19 | `DelegationAuthorization` / `sign_delegation_authorization` match `DelegationAuthorization-v1`; tampering fails verification and `UserRejected` propagates |
+| D20 | `anchor_payload_hash` is byte-identical to `chain-sdk::sd::payload_hash`; hash functions follow the 3.8 table |
 
 ### 10.2 Selective disclosure
 
@@ -600,6 +727,9 @@ of the full VC JSON. See `selective-disclosure-interop.md` for the byte-level co
 ## 11. Compatibility and Change Control
 
 - `v0.1.0` did not contain selective disclosure; `v0.2.0` does.
+- `v0.2.1` is additive over `v0.2.0`: `DelegationAuthorization`, `sign_delegation_authorization`,
+  `anchor_payload_hash`, public `vc_hash` / `vc_hash_without_proof`, and
+  `DelegationAuthorization::verify`. Existing signatures, wire formats and error variants are unchanged.
 - `v0.1.0` used `chain` backend; R1 removed it before `v0.2.0`.
 - Breaking changes require a major/minor version decision and updates to this document,
   `KeyVaultCore-Interface-Contract.md` and `selective-disclosure-interop.md`.

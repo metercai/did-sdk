@@ -39,6 +39,7 @@ pub use config::{
 pub use error::DidSdkError;
 pub use mock::{ConfirmPolicy, MockBackend};
 pub use types::*;
+pub use vc::{anchor_payload_hash, vc_hash, vc_hash_without_proof};
 
 /// 运行模式标记 trait（Client / Server）。
 pub trait SdkMode: Send + Sync + 'static {
@@ -560,7 +561,12 @@ impl DidSdk<Client> {
         ))
     }
 
-    /// 签发授权签名。
+    /// 签发发行授权签名（`IssuedVc-v1`）。
+    ///
+    /// `timestamp` **当前不参与** `IssuedVc-v1`，它不是防重放字段；
+    /// 需要时间绑定的委托授权请使用
+    /// [`DidSdk::<Client>::sign_delegation_authorization`]。
+    /// 如需为 VC 签发授权增加时间绑定，应新增 `IssuedVc-v2`，不得修改本格式。
     pub async fn sign_issue_authorization(
         &self,
         subject_did: &str,
@@ -590,6 +596,104 @@ impl DidSdk<Client> {
             .await
             .map_err(map_vault_err)?;
         Ok(IssueAuthorizationSignature(signature.0))
+    }
+
+    /// 用户 A 对“授权链主代提交锚定”签名（`DelegationAuthorization-v1`）。
+    ///
+    /// - `vc_hash` 必须由调用方用 [`crate::anchor_payload_hash`] 计算；
+    /// - `delegate_did` / `delegate_operator` 是链主的 `did:web` / SS58；
+    /// - `timestamp` 参与签名，调用方负责选取当前 Unix 秒；
+    /// - 使用当前 active did:key 的 `ClientDid`/Ed25519 密钥；
+    /// - 返回自包含的 [`DelegationAuthorization`]（含 `signer_did` 与 `signature`）。
+    ///
+    /// 参数校验失败返回 [`DidSdkError::InvalidArgument`]；当前 active DID 不是
+    /// `did:key`（例如 `did:peer`）返回
+    /// [`DidSdkError::Unsupported`]（POC 限制：委托授权只支持 `did:key`）。
+    /// 用户拒绝确认时 `UserRejected` 1:1 透传。
+    ///
+    /// 签名输入只覆盖：
+    ///
+    /// ```text
+    /// DelegationAuthorization-v1
+    /// {vc_hash}
+    /// {delegate_did}
+    /// {delegate_operator}
+    /// {timestamp}
+    /// ```
+    ///
+    /// 由 `keyvault_core::signing_input::delegation_authorization_v1` 生成，
+    /// 不覆盖 JSON 外壳。
+    pub async fn sign_delegation_authorization(
+        &self,
+        vc_hash: &str,
+        delegate_did: &str,
+        delegate_operator: &str,
+        timestamp: u64,
+    ) -> Result<DelegationAuthorization, DidSdkError> {
+        if vc_hash.is_empty() {
+            return Err(DidSdkError::InvalidArgument("empty vc_hash".into()));
+        }
+        if delegate_did.is_empty() {
+            return Err(DidSdkError::InvalidArgument("empty delegate_did".into()));
+        }
+        if !delegate_did.starts_with("did:") {
+            return Err(DidSdkError::InvalidArgument(format!(
+                "delegate_did must start with the did: scheme: {delegate_did}"
+            )));
+        }
+        if delegate_operator.is_empty() {
+            return Err(DidSdkError::InvalidArgument(
+                "empty delegate_operator".into(),
+            ));
+        }
+        if timestamp == 0 {
+            return Err(DidSdkError::InvalidArgument("timestamp must be > 0".into()));
+        }
+
+        self.backend.confirm_authorization().await?;
+        self.core
+            .confirm_authorization(
+                &["DelegationAuthorization".to_string()],
+                "delegation",
+                delegate_did,
+            )
+            .await?;
+
+        let signer_did = self.holder_did()?;
+        if !signer_did.starts_with("did:key:") {
+            return Err(DidSdkError::Unsupported(
+                "delegation authorization requires did:key".into(),
+            ));
+        }
+        let key_id = self.active_key().await?;
+        let vault = self
+            .vault
+            .as_ref()
+            .ok_or_else(|| DidSdkError::Unsupported("no KeyVault".into()))?;
+        let signing_input = keyvault_core::signing_input::delegation_authorization_v1(
+            vc_hash,
+            delegate_did,
+            delegate_operator,
+            timestamp,
+        );
+        let signature = vault
+            .sign_checked(
+                &key_id,
+                &signing_input,
+                KeyNamespace::ClientDid,
+                KeyAlgorithm::Ed25519,
+            )
+            .await
+            .map_err(map_vault_err)?;
+        Ok(DelegationAuthorization {
+            version: DelegationAuthorization::VERSION,
+            vc_hash: vc_hash.to_string(),
+            delegate_did: delegate_did.to_string(),
+            delegate_operator: delegate_operator.to_string(),
+            timestamp,
+            signer_did,
+            signature: signature.0,
+        })
     }
 }
 

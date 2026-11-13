@@ -32,6 +32,149 @@ pub struct Ed25519PublicKey(pub [u8; 32]);
 #[serde(transparent)]
 pub struct IssueAuthorizationSignature(pub Vec<u8>);
 
+/// 委托锚定授权声明（路径三：用户 A 授权链主代提交锚定）。
+///
+/// `signature` 覆盖的是 `DelegationAuthorization-v1` 待签名字节
+/// （见 [`DelegationAuthorization::signing_input`]），**不覆盖**本结构的 JSON 外壳。
+/// 链主收到 [`DelegationAuthorization::to_bytes`] 的 JSON 字节后，可用
+/// `signer_did` 的 `did:key` 自包含公钥独立验签。
+///
+/// 与 [`IssueAuthorizationSignature`] 的区别：后者是发行方对 VC 签发的授权
+/// （`IssuedVc-v1`），本类型是用户对“链主代提交某个 VC 锚定”的委托授权
+/// （`DelegationAuthorization-v1`），两者互不替代。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DelegationAuthorization {
+    /// 固定 1，便于未来演进。
+    pub version: u8,
+    /// 被授权锚定的 VC 哈希（通常由 [`crate::anchor_payload_hash`] 计算）。
+    pub vc_hash: String,
+    /// 链主 did:web。
+    pub delegate_did: String,
+    /// 链主 operator（SS58）。
+    pub delegate_operator: String,
+    /// Unix 秒；参与签名，服务端据此做新鲜度校验。
+    pub timestamp: u64,
+    /// 用户 A 的 did:key（自包含公钥）。
+    pub signer_did: String,
+    /// Ed25519 裸签名（对 `DelegationAuthorization-v1` 输入）。
+    ///
+    /// JSON 编码为 64 个字节值的数组（`Vec<u8>` 的 serde 默认表示）。
+    pub signature: Vec<u8>,
+}
+
+impl DelegationAuthorization {
+    /// 当前（也是唯一）支持的声明版本。
+    pub const VERSION: u8 = 1;
+
+    /// 重算待签名字节：
+    /// `delegation_authorization_v1(vc_hash, delegate_did, delegate_operator, timestamp)`。
+    ///
+    /// 直接调用 `keyvault-core` 的参考实现，不自行拼接格式字符串。
+    pub fn signing_input(&self) -> Vec<u8> {
+        keyvault_core::signing_input::delegation_authorization_v1(
+            &self.vc_hash,
+            &self.delegate_did,
+            &self.delegate_operator,
+            self.timestamp,
+        )
+    }
+
+    /// 序列化为紧凑 UTF-8 JSON 字节，供链主 `submit_delegated_anchor` 的
+    /// `authorization_signature: &[u8]` 参数直接携带。
+    ///
+    /// 写前会校验版本、必填字段与 `signer_did` 的 `did:key` 约束。
+    /// 紧凑 JSON 不保证字段顺序（本实现由结构体字段顺序固定），
+    /// 签名也不覆盖 JSON 外壳。
+    pub fn to_bytes(&self) -> Result<Vec<u8>, DidSdkError> {
+        self.validate()?;
+        serde_json::to_vec(self)
+            .map_err(|error| DidSdkError::InvalidArgument(format!("serialize delegation: {error}")))
+    }
+
+    /// 从 [`DelegationAuthorization::to_bytes`] 的字节反序列化并校验。
+    ///
+    /// 拒绝：`version != 1`、空字段、非 `did:` 的 `delegate_did`、
+    /// 非 `did:key:` 的 `signer_did`、`timestamp == 0`、空签名。
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, DidSdkError> {
+        let authorization: Self = serde_json::from_slice(bytes).map_err(|error| {
+            DidSdkError::InvalidArgument(format!("parse delegation authorization: {error}"))
+        })?;
+        authorization.validate()?;
+        Ok(authorization)
+    }
+
+    /// 用 `signer_did` 的 `did:key` 自包含公钥验签；
+    /// 同时校验版本、字段与 `did:key` 约束。
+    ///
+    /// 链主侧仍应独立验签（不信任客户端），本方法主要用于客户端自检与测试。
+    pub fn verify(&self) -> Result<(), DidSdkError> {
+        self.validate()?;
+        let public_key =
+            keyvault_core::crypto::decode_did_key_pubkey(&self.signer_did).map_err(|error| {
+                DidSdkError::InvalidArgument(format!("invalid signer_did: {error}"))
+            })?;
+        if self.signature.len() != 64 {
+            return Err(DidSdkError::VcVerificationFailed(format!(
+                "delegation authorization signature must be 64 bytes, got {}",
+                self.signature.len()
+            )));
+        }
+        if keyvault_core::crypto::ed25519::verify(
+            &public_key,
+            &self.signing_input(),
+            &self.signature,
+        ) {
+            Ok(())
+        } else {
+            Err(DidSdkError::VcVerificationFailed(
+                "delegation authorization signature mismatch".into(),
+            ))
+        }
+    }
+
+    fn validate(&self) -> Result<(), DidSdkError> {
+        if self.version != Self::VERSION {
+            return Err(DidSdkError::InvalidArgument(format!(
+                "unsupported delegation authorization version: {}",
+                self.version
+            )));
+        }
+        if self.vc_hash.is_empty() {
+            return Err(DidSdkError::InvalidArgument("empty vc_hash".into()));
+        }
+        if self.delegate_did.is_empty() {
+            return Err(DidSdkError::InvalidArgument("empty delegate_did".into()));
+        }
+        if !self.delegate_did.starts_with("did:") {
+            return Err(DidSdkError::InvalidArgument(format!(
+                "delegate_did must start with the did: scheme: {}",
+                self.delegate_did
+            )));
+        }
+        if self.delegate_operator.is_empty() {
+            return Err(DidSdkError::InvalidArgument(
+                "empty delegate_operator".into(),
+            ));
+        }
+        if self.timestamp == 0 {
+            return Err(DidSdkError::InvalidArgument("timestamp must be > 0".into()));
+        }
+        if self.signer_did.is_empty() {
+            return Err(DidSdkError::InvalidArgument("empty signer_did".into()));
+        }
+        if !self.signer_did.starts_with("did:key:") {
+            return Err(DidSdkError::InvalidArgument(format!(
+                "signer_did must be did:key: {}, not did:peer or did:web",
+                self.signer_did
+            )));
+        }
+        if self.signature.is_empty() {
+            return Err(DidSdkError::InvalidArgument("empty signature".into()));
+        }
+        Ok(())
+    }
+}
+
 /// DID 方法。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]

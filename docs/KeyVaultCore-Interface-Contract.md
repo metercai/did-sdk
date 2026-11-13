@@ -3,7 +3,7 @@
 | Item | Value |
 |---|---|
 | Document | `keyvault-core` interface contract and implementation specification |
-| Package | `keyvault-core` v0.2.0 |
+| Package | `keyvault-core` v0.2.1 |
 | Status | Implemented; 28 tests passing; CI green |
 | Audience | `did-sdk`, `chain-sdk`, `chain-owner-sdk`, binding maintainers |
 | Normative | This document is the single source of truth for the KeyVault contract. |

@@ -8,7 +8,7 @@ repository.workspace = true
 description = "did-sdk Server-mode product artifact"
 
 [dependencies]
-did-sdk = { path = "../..", version = "0.2.0" }
+did-sdk = { path = "../..", version = "0.2.1" }
 
 [lints]
 workspace = true

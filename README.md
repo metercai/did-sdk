@@ -9,8 +9,10 @@
 DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` 两种运行模式**
 × **Mock / Centralized 两种后端** × **did:key / did:peer / did:web 三种 DID 方法**。
 
-> **当前状态：已按更新版规格重构；当前版本 [`v0.2.0`](https://github.com/metercai/did-sdk/releases/tag/v0.2.0) 已发布。**
-> `v0.2.0` 包含选择性披露（selective disclosure）与 Client/Server 双产物。
+> **当前状态：已按更新版规格重构；当前版本 [`v0.2.1`](https://github.com/metercai/did-sdk/releases/tag/v0.2.1) 已发布。**
+> `v0.2.1` 在 `v0.2.0` 基础上增量加入路径三（委托锚定）：`DelegationAuthorization`、
+> `sign_delegation_authorization`、`anchor_payload_hash`，并公开 `vc_hash` / `vc_hash_without_proof`；
+> 既有 API、序列化格式与错误变体不变。
 > - Spec: [DidSdk Interface Contract](docs/DidSdk-Interface-Contract.md)
 > - Spec: [KeyVaultCore Interface Contract](docs/KeyVaultCore-Interface-Contract.md)
 > - Spec: [Selective Disclosure Interop](docs/selective-disclosure-interop.md)
@@ -38,9 +40,9 @@ DID 方法与 VC 钱包统一能力层：**`DidSdk<Client>` / `DidSdk<Server>` �
 
 **Client / Server 两套产物分别编译、分别发布。**
 
-> v0.2.0 当前通过 **GitHub Release** 分发；crates.io / PyPI / npm 公开注册表尚未配置发布凭据。
+> v0.2.1 当前通过 **GitHub Release** 分发；crates.io / PyPI / npm 公开注册表尚未配置发布凭据。
 > 下方 `pip install` / `npm install` / `cargo add` 是发布后的目标用法，当前请使用
-> [Release 资产](#从-github-release-v010-安装)。
+> [Release 资产](#从-github-release-v021-安装)。
 
 | 产物 | Client | Server |
 |---|---|---|
@@ -69,24 +71,24 @@ cd bindings/node && npm ci && npx napi build --platform --release
 cd bindings/node-server && npm install && npx napi build --platform --release
 ```
 
-### 从 GitHub Release v0.2.0 安装
+### 从 GitHub Release v0.2.1 安装
 
 无需等待 PyPI/npm 发布，可直接使用 Release 资产：
 
 ```bash
 # Python（按平台选择 wheel）
-pip install https://github.com/metercai/did-sdk/releases/download/v0.2.0/did_sdk_client-0.2.0-cp312-cp312-macosx_11_0_arm64.whl
-pip install https://github.com/metercai/did-sdk/releases/download/v0.2.0/did_sdk_server-0.2.0-cp312-cp312-macosx_11_0_arm64.whl
+pip install https://github.com/metercai/did-sdk/releases/download/v0.2.1/did_sdk_client-0.2.1-cp312-cp312-macosx_11_0_arm64.whl
+pip install https://github.com/metercai/did-sdk/releases/download/v0.2.1/did_sdk_server-0.2.1-cp312-cp312-macosx_11_0_arm64.whl
 
 # Node（Tarball 内含 5 平台 .node）
-npm install https://github.com/metercai/did-sdk/releases/download/v0.2.0/did-sdk-client-0.2.0.tgz
-npm install https://github.com/metercai/did-sdk/releases/download/v0.2.0/did-sdk-server-0.2.0.tgz
+npm install https://github.com/metercai/did-sdk/releases/download/v0.2.1/did-sdk-client-0.2.1.tgz
+npm install https://github.com/metercai/did-sdk/releases/download/v0.2.1/did-sdk-server-0.2.1.tgz
 
 # Rust 静态 CLI
-curl -LO https://github.com/metercai/did-sdk/releases/download/v0.2.0/mini-cli-x86_64-unknown-linux-musl
+curl -LO https://github.com/metercai/did-sdk/releases/download/v0.2.1/mini-cli-x86_64-unknown-linux-musl
 ```
 
-Release：[`v0.2.0`](https://github.com/metercai/did-sdk/releases/tag/v0.2.0)（含 10 个 wheel、2 个 npm tarball、4 个 Rust CLI、`SHA256SUMS`）。
+Release：[`v0.2.1`](https://github.com/metercai/did-sdk/releases/tag/v0.2.1)（含 10 个 wheel、2 个 npm tarball、4 个 Rust CLI、`SHA256SUMS`）。
 
 **本项目不提供浏览器 WASM 版本。**
 
@@ -240,6 +242,7 @@ console.log(did, peer, sig.length, vc.proof.jws);
 | `issue_self_asserted_vc` | 是 | 配置本地签名器时可用 |
 | `assemble_vc_with_proof` | — | 是（外部 `Proof` 注入） |
 | `verify_vc` | — | 是（issuer 解析 + 签名 + 有效期；不做链上锚定查询） |
+| `sign_delegation_authorization` | 是（路径三委托锚定授权） | — |
 
 VC 的 `proof` 结构：
 
@@ -282,6 +285,58 @@ assert!(result.verified);
 - `H = SHA-256(base64url(salt) || base64url(name) || base64url(value))`；
 - VP 的 `disclosures` 字段 + `vp_sd_v1` 签名覆盖 VC 原文、Disclosures、challenge、domain；
 - 未披露属性对验证方不可见；同一 VC 跨出示可关联与跨验证方合谋是选择性披露的固有边界。
+
+### 5.2 路径三：委托锚定授权
+
+用户 A 签发 VC 后，可授权链主（chain owner）代提交锚定。`did-sdk` 只负责产生自包含的授权声明，
+不访问链、不提交 extrinsic：
+
+```rust
+use did_sdk::{DelegationAuthorization, anchor_payload_hash};
+
+// 1. 用户 A 签发 VC（可含选择性披露）
+let (vc, disclosures) = sdk.issue_selective_vc(
+    serde_json::json!({"type": "IDCardVC", "name": "Alice"}),
+    &["name".into()],
+)?;
+sdk.store_vc_with_disclosures(vc.clone(), disclosures).await?;
+
+// 2. 锚定载荷哈希：去掉 proof / anchor_id 的紧凑 JSON，BLAKE2b-256
+let vc_hash = anchor_payload_hash(&vc)?;          // "blake2b:<hex>"
+
+// 3. 对 DelegationAuthorization-v1 签名
+let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs();
+let authorization = sdk.sign_delegation_authorization(
+    &vc_hash,
+    "did:web:identity.example.com:chain-owner",   // 链主 did:web
+    "5GrwvaEF5zXb26Fz9rcQpDWSZ",                  // 链主 SS58
+    now,
+).await?;
+
+// 4. 紧凑 JSON 字节交给链主，作为 submit_delegated_anchor 的 authorization_signature
+let bytes = authorization.to_bytes()?;
+
+// 链主侧（或客户端自检）
+let parsed = DelegationAuthorization::from_bytes(&bytes)?;
+parsed.verify()?;
+```
+
+- 签名只覆盖 `DelegationAuthorization-v1` 输入（`vc_hash`、`delegate_did`、`delegate_operator`、
+  `timestamp`），不覆盖 JSON 外壳；
+- `signer_did` 是用户 A 的 active `did:key`，链主可离线验签；当前 POC 仅支持 `did:key`
+  （`did:peer` 返回 `DidSdkError::Unsupported`）；
+- 委托授权（`DelegationAuthorization`）与签发授权（`IssueAuthorizationSignature`）是两件事：
+  前者授权“链主代提交锚定”，后者授权“发行方签发 VC”（`IssuedVc-v1`）。
+
+VC 哈希函数的语义（均对 `serde_json::to_vec` 紧凑 JSON 计算 BLAKE2b-256）：
+
+| 函数 | 去掉 `proof` | 去掉 `anchor_id` | 返回 |
+|---|---|---|---|
+| `vc_hash_without_proof` | 是 | 否 | 小写 hex |
+| `vc_hash` | 否 | 否 | 小写 hex |
+| `anchor_payload_hash` | 是 | 是 | `blake2b:<hex>` |
+
+`anchor_payload_hash` 与 `chain-sdk` 的 `sd::payload_hash` 逐字节一致。
 
 ---
 
@@ -379,6 +434,7 @@ export CARGO_HOME="$PWD/.cargo-home"
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --exclude did-sdk-python --exclude did-sdk-node
+# 当前：did-sdk 68 + keyvault-core 28（cargo test --locked --all-features）
 
 # 三套产物
 bash scripts/build-rust-musl.sh
@@ -389,7 +445,20 @@ bash scripts/cross-lang-vectors.sh
 
 ---
 
-## 10. 兼容性说明（相对旧版）
+## 10. 兼容性说明
+
+### 10.1 v0.2.1（相对 v0.2.0）
+
+**完全增量、向后兼容**：
+
+- 新增 `DelegationAuthorization`、`DidSdk<Client>::sign_delegation_authorization`；
+- 新增 `anchor_payload_hash`；`vc_hash` / `vc_hash_without_proof` 从 crate 内部改为公开并从根导出；
+- 新增 `DelegationAuthorization::verify`；
+- `IssueAuthorizationSignature` / `IssuedVc-v1` 行为、`_sd` / Disclosures / VP 格式、
+  错误变体、`DidRecord.method` 必填语义均不变；
+- `did-sdk` 与 `keyvault-core` 同为 `0.2.1`，`chain-sdk v0.1.1` 可直接把依赖从 `v0.2.0` 升到 `v0.2.1`。
+
+### 10.2 v0.2.0（相对旧版）
 
 本次按更新版规格做了**破坏性重构**：
 

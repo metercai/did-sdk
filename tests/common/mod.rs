@@ -84,6 +84,20 @@ pub async fn assert_roundtrip(sdk: &DidSdk<Client>) {
         .expect("authorization");
     assert_eq!(authorization.0.len(), 64);
 
+    let delegation = sdk
+        .sign_delegation_authorization(
+            &did_sdk::anchor_payload_hash(&vc).expect("anchor payload hash"),
+            "did:web:identity.example.com:chain-owner",
+            "5GrwvaEF5zXb26Fz9rcQpDWSZ",
+            1_700_000_000,
+        )
+        .await
+        .expect("delegation authorization");
+    assert_eq!(delegation.signer_did, created.did);
+    delegation
+        .verify()
+        .expect("delegation authorization verifies");
+
     sdk.remove_vc(&anchor_id).await.expect("remove vc");
     assert!(sdk.get_vc(&anchor_id).await.expect("get removed").is_none());
     assert!(sdk.remove_vc(&anchor_id).await.is_err());
