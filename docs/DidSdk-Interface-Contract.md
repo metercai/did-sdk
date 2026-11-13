@@ -722,7 +722,7 @@ The chain owner recomputes `anchor_payload_hash` from the VC and compares it wit
 - Implementation commit: `8fe8ba3`; Rust tests: keyvault-core 28, did-sdk 68 (96 total).
 - Local gates: `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`,
   `cargo test --locked --all-features`, `cargo doc --no-deps` — all green.
-- Release tag: `v0.2.1` (annotated); `.github/workflows/release.yml` runs on tag push.
+- Release tag: `v0.2.1` (annotated tag object `e51c8af` → commit `6f8afb6`); `.github/workflows/release.yml` runs on tag push.
 
 `v0.2.0` (selective disclosure):
 
